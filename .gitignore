@@ -1,0 +1,8 @@
+.DS_Store
+build
+out
+.vs
+raylib/
+settings.json
+.cache
+notes.txt

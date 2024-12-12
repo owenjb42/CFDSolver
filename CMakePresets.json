@@ -1,0 +1,70 @@
+{
+  "version": 5,
+  "cmakeMinimumRequired": {
+	"major": 3,
+	"minor": 12,
+	"patch": 0
+  },
+  "configurePresets": [
+	{
+      "name": "default",
+      "generator": "Ninja",
+      "cacheVariables": {
+		"CMAKE_BUILD_TYPE": "Debug"
+      }
+	},
+	{
+      "name": "release",
+      "generator": "Ninja",
+      "cacheVariables": {
+		"CMAKE_BUILD_TYPE": "Release"
+      }
+	},
+	{
+		"name": "Ninja-MSVC",
+		"displayName": "Ninja MSVC",
+		"description": "Generate using Ninja multi-config, build using MSVC17 x64",
+		"generator": "Ninja Multi-Config",
+		"binaryDir": "build/${presetName}",
+		"architecture": {
+			"value": "x64",
+			"strategy": "external"
+		},
+		"toolset": {
+			"value": "host=x64",
+			"strategy": "external"
+		},
+		"condition": {
+			"type": "equals",
+			"lhs": "${hostSystemName}",
+			"rhs": "Windows"
+		},
+		"cacheVariables": {
+			"CMAKE_C_COMPILER":        "cl.exe",
+			"CMAKE_CXX_COMPILER":      "cl.exe",
+			"CMAKE_CXX_FLAGS_DEBUG":   "-DZ_DEBUG /MDd /Zi /Ob0 /Od /RTC1",
+			"CMAKE_C_FLAGS_DEBUG":     "-DZ_DEBUG /MDd /Zi /Ob0 /Od /RTC1",
+			"CMAKE_CXX_FLAGS_RELEASE": "-DZ_RELEASE /MD /O2 /Ob2 /DNDEBUG",
+			"CMAKE_C_FLAGS_RELEASE":   "-DZ_RELEASE /MD /O2 /Ob2 /DNDEBUG"
+		}
+	}
+  ],
+  "buildPresets": [
+	{
+		"name": "Ninja-msvc-release",
+		"configurePreset": "Ninja-MSVC",
+		"displayName": "Release",
+		"configuration": "Release",
+		"verbose": false,
+		"targets": [ "CFDSolver" ]
+	},
+	{
+		"name": "Ninja-msvc-debug",
+		"configurePreset": "Ninja-MSVC",
+		"displayName": "Debug",
+		"configuration": "Debug",
+		"verbose": false,
+		"targets": [ "CFDSolver" ]
+	}
+  ]
+}
