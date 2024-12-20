@@ -112,10 +112,8 @@ public:
             u_old = u;
             v_old = v;
 
-            // Compute fluxes
             ComputeConvectiveFluxes();
 
-            // Compute diffusive terms
             ComputeDiffusiveTerms();
 
             // Update velocities (simplified momentum equation)
@@ -129,15 +127,14 @@ public:
                 }
             }
 
-            // Pressure correction
             PressureCorrection();
 
-            // Apply boundary conditions (simplified)
             ApplyVelocityBoundaryConditions();
         }
 
         //generateVectorFieldWithGrid(u, v);
-        generateVectorFieldWithGrid(u, v);
+        auto plotter = CFDVisualizer(nx, ny, (float)dx, (float)dy, u, v, p);
+        plotter.Render();
     }
 
     // Simplified boundary conditions
@@ -146,11 +143,11 @@ public:
         for (int j = 0; j < ny; ++j)
         {
             // Left boundary
-            u(0, j) = 0.0;
+            u(0, j) = -u(1, j);
             v(0, j) = 0.0;
 
             // Right boundary
-            u(nx - 1, j) = 0.0;
+            u(nx - 1, j) = -u(nx - 2, j);
             v(nx - 1, j) = 0.0;
         }
 
@@ -158,11 +155,11 @@ public:
         {
             // Top boundary
             u(i, 0) = 1.0;
-            v(i, 0) = 0.0;
+            v(i, 0) = -v(i, 1);
 
             // Bottom boundary
             u(i, ny - 1) = 0.0;
-            v(i, ny - 1) = 0.0;
+            v(i, ny - 1) = -v(i, ny - 2);
         }
     }
 
@@ -213,5 +210,4 @@ public:
     PhysicalField v_dif{ nx, ny };
 
     PhysicalField mass_flux{ nx, ny };
-    //PhysicalField pressure_correction{ nx, ny };
 };

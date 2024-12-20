@@ -2,8 +2,8 @@
 
 int main()
 {
-	Solver s(50, 50, 1.0, 1.0);
-	s.solve(1000);
+	Solver s(20, 20, 1.0, 1.0);
+	s.solve(2000);
 
 	return 0;
 }
