@@ -9,34 +9,53 @@
 #include "PhysicalField.hpp"
 #include "Plotter.hpp"
 
-class Solver 
+class SolverFaceVelocity
 {
 public:
-    Solver(int nx, int ny, double dx, double dy) : nx(nx), ny(ny), dx(dx), dy(dy)
+    SolverFaceVelocity(int nx, int ny, double dx, double dy) : nx(nx), ny(ny), dx(dx), dy(dy)
     {
         if (dt > 0.5 * std::pow(std::min(dx, dy), 2) / fluid.kinematic_viscosity)
             std::cout << "Unstable\n";
     }
 
-    // Calculate convective terms
+    // Calculate convective terms (on faces)
     void ComputeConvectiveFluxes() 
     {
-        for (int i = 1; i < nx - 1; ++i)
+        for (int i = 1; i < nx; ++i)
         {
-            for (int j = 1; j < ny - 1; ++j) 
+            for (int j = 0; j < ny; ++j)
             {
                 // U-velocity flux (central difference)
-                u_flux(i, j) = (u(i + 1, j) - u(i - 1, j)) * u(i, j) / (2 * dx) +
-                               (u(i, j + 1) - u(i, j - 1)) * v(i, j) / (2 * dy);
+                
+                //inline
+                u_flux(i, j) = (u(i + 1, j) - u(i - 1, j)) * u(i, j) / (2 * dx);
 
+                //ofline
+                if (j != 0)
+                    u_flux(i, j) += (u(i, j) - u(i, j - 1)) * ((v(i, j) + v(i - 1, j)) / 2.0) / dy;
+                if (j != ny - 1)
+                    u_flux(i, j) += ((u(i, j + 1) - u(i, j)) * (v(i, j + 1) + v(i - 1, j + 1)) / 2.0) / dy;
+            }
+        }
+        for (int i = 0; i < nx; ++i)
+        {
+            for (int j = 1; j < ny; ++j)
+            {
                 // V-velocity flux (central difference)
-                v_flux(i, j) = (v(i + 1, j) - v(i - 1, j)) * u(i, j) / (2 * dx) +
-                               (v(i, j + 1) - v(i, j - 1)) * v(i, j) / (2 * dy);
+                
+                //inline
+                v_flux(i, j) = (v(i, j + 1) - v(i, j - 1)) * v(i, j) / (2 * dy);
+
+                //ofline
+                if (i != 0)
+                    v_flux(i, j) = (v(i, j) - v(i - 1, j)) * ((u(i, j) + u(i, j - 1)) / 2.0) / dx;
+                if (i != nx - 1)
+                    v_flux(i, j) = ((v(i + 1, j) - v(i, j)) * (u(i + 1, j) + u(i + 1, j - 1)) / 2.0) / dx;
             }
         }
     }
 
-    // Compute diffusive terms
+    // Compute diffusive terms (on faces)
     void ComputeDiffusiveTerms() 
     {
         for (int i = 1; i < nx - 1; ++i)
@@ -58,6 +77,19 @@ public:
         }
     }
 
+    // Set the cell velocities from the face values
+    void CalculateCellVelocities()
+    {
+        for (int i = 0; i < nx; ++i)
+        {
+            for (int j = 0; j < ny; ++j)
+            {
+                cell_u(i, j) = (u(i, j) + u(i + 1, j)) / 2.0;
+                cell_v(i, j) = (v(i, j) + v(i + 1, j)) / 2.0;
+            }
+        }
+    }
+
     // Pressure correction step (SIMPLE algorithm)
     void PressureCorrection()
     {
@@ -66,8 +98,8 @@ public:
             for (int j = 1; j < ny - 1; ++j)
             {
                 p_equation_rhs(i, j) = (fluid.density / dt) * 
-                    ((u(i + 1, j) - u(i - 1, j)) / (2.0f * dx) +
-                     (v(i, j + 1) - v(i, j - 1)) / (2.0f * dy));
+                    ((u(i + 1, j) - u(i, j)) / dx +
+                     (v(i, j + 1) - v(i, j)) / dy);
 
                 //p_equation_rhs(i, j) = (fluid.density * dx / 16) * (
                 //    (2 / dt) * (u(i, j) - u(j, i - 1) + v(j + 1, i) - v(j - 1, i))
@@ -99,14 +131,14 @@ public:
             ApplyPressureBoundaryConditions();
         }
 
-        // Update pressure and correct velocities 
+        // Update pressure and correct velocities (on faces)
         for (int j = 1; j < ny - 1; ++j)
         {
             for (int i = 1; i < nx - 1; ++i)
             {
                 // Correct velocities using the pressure gradient
-                u(i, j) -= dt * (p(i, j) - p(i - 1, j)) / (2.0f * fluid.density * dx);
-                v(i, j) -= dt * (p(i, j + 1) - p(i, j - 1)) / (2.0f * fluid.density * dy);
+                u(i, j) -= dt * (p(i, j) - p(i - 1, j)) / (fluid.density * dx);
+                v(i, j) -= dt * (p(i, j) - p(i, j - 1)) / (fluid.density * dy);
             }
         }
     }
@@ -150,8 +182,10 @@ public:
             if (maxResidual < residualLimit && iter != 0) break;
         }
 
-        //generateVectorFieldWithGrid(u, v);
-        auto plotter = CFDVisualizer(nx, ny, (float)dx, (float)dy, u, v, p);
+        CalculateCellVelocities();
+
+        // Plot Results
+        auto plotter = CFDVisualizer(nx, ny, (float)dx, (float)dy, cell_u, cell_v, p);
         plotter.Render();
     }
 
@@ -161,11 +195,11 @@ public:
         for (int j = 0; j < ny; ++j)
         {
             // Left boundary
-            u(0, j) = -u(1, j);
+            u(0, j) = 0.0;
             v(0, j) = 0.0;
 
             // Right boundary
-            u(nx - 1, j) = -u(nx - 2, j);
+            u(nx - 1, j) = 0.0;
             v(nx - 1, j) = 0.0;
         }
 
@@ -173,11 +207,11 @@ public:
         {
             // Top boundary
             u(i, 0) = 1.0;
-            v(i, 0) = -v(i, 1);
+            v(i, 0) = 0.0;
 
             // Bottom boundary
             u(i, ny - 1) = 0.0;
-            v(i, ny - 1) = -v(i, ny - 2);
+            v(i, ny - 1) = 0.0;
         }
     }
 
@@ -192,43 +226,45 @@ public:
             p(nx - 1, j) = p(nx - 2, j);
         }
 
-        for (int i = 1; i < nx - 1; ++i)
+        for (int i = 0; i < nx; ++i)
         {
             // Top boundary
             p(i, 0) = p(i, 1);
 
             // Bottom boundary
-            p(i, ny - 1) = 0.0;// p(i, ny - 2);
+            //p(i, ny - 1) = p(i, ny - 2);
+            p(i, ny - 1) = 0.0;
         }
     }
 
     struct FluidProperties
     {
         double density{ 1.0 };
-        double kinematic_viscosity{ 0.1 /*0.000015*/ };
+        double kinematic_viscosity{ 0.000015 };
     };
 
     FluidProperties fluid;
 
     int nx, ny;
     double dx, dy;
-    double dt{ 0.0000001 };
+    double dt{ 0.000001 };
 
-    int innerPressureItterations{ 20 };
+    int innerPressureItterations{ 100 };
     double residualLimit{ 0.0001 };
 
     PhysicalField p{ nx, ny };
     PhysicalField p_old{ nx, ny };
     PhysicalField p_equation_rhs{ nx, ny };
 
-    PhysicalField u{ nx, ny }, v{ nx, ny };
-    PhysicalField u_old{ nx, ny }, v_old{ nx, ny };
+    PhysicalField cell_u{ nx, ny };
+    PhysicalField cell_v{ nx, ny };
 
-    PhysicalField u_flux{ nx, ny };
-    PhysicalField v_flux{ nx, ny };
+    PhysicalField u{ nx + 1, ny }, v{ nx, ny + 1 };
+    PhysicalField u_old{ nx + 1, ny }, v_old{ nx, ny + 1 };
 
-    PhysicalField u_dif{ nx, ny };
-    PhysicalField v_dif{ nx, ny };
+    PhysicalField u_flux{ nx + 1, ny };
+    PhysicalField v_flux{ nx, ny + 1 };
 
-    PhysicalField mass_flux{ nx, ny };
+    PhysicalField u_dif{ nx + 1, ny };
+    PhysicalField v_dif{ nx, ny + 1 };
 };

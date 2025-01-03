@@ -1,9 +1,14 @@
 #include "Solver.hpp"
+#include "SolverFaceVelocity.hpp"
+#include "SolverFaceVelocityV2.hpp"
 
 int main()
 {
-	Solver s(20, 20, 1.0, 1.0);
-	s.solve(2000);
+	Solver s(5, 5, 0.01, 0.01);
+	s.solve(20000);
+	
+	//SolverFaceVelocity s(50, 50, 0.01, 0.01);
+	//s.solve(20000);
 
 	return 0;
 }

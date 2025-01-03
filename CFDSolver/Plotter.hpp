@@ -12,12 +12,17 @@ public:
     CFDVisualizer(int nx, int ny, float dx, float dy, const PhysicalField& u, const PhysicalField& v, const PhysicalField& p)
         : nx(nx), ny(ny), dx(dx), dy(dy), u(u), v(v), p(p) 
     {
+        SetTraceLogLevel(LOG_ERROR);
         SetConfigFlags(FLAG_WINDOW_RESIZABLE);
         InitWindow(1000, 1000, "CFD Simulation Visualization");
         SetTargetFPS(60);
 
         minPressure = *std::ranges::min_element(p.values);
         maxPressure = *std::ranges::max_element(p.values);
+
+        double max_scale = std::max(nx * dx / 1000, ny * dy / 1000);
+        zoom = 1 / max_scale;
+        velocityScale = 1000.0f * max_scale;
     }
 
     ~CFDVisualizer() 
@@ -49,11 +54,11 @@ private:
     int cellWidth{ 0 }, cellHeight{ 0 };
 
     // Render settings
-    float gridScalling{ 100 };
     int offsetX{ 0 }, offsetY{ 0 }; // offset in the screen co-ords
     float zoom{ 1.0f };
     float zoom_sensitivity{ 0.1f };
     float minZoomLevel{ 0.01f };
+    float velocityScale{ 300.0f };
 
     float minPressure{ 0.0 }, maxPressure{ 0.0 };
 
@@ -70,6 +75,12 @@ private:
             new_zoom *= 1.0f + zoom_sensitivity;  // Zoom in
         else if (IsKeyPressed(KEY_X))
             new_zoom *= 1.0f - zoom_sensitivity;  // Zoom out
+
+        // Scale Velocity
+        if (IsKeyPressed(KEY_A))
+            velocityScale *= 1.0f + zoom_sensitivity;
+        else if (IsKeyPressed(KEY_S))
+            velocityScale *= 1.0f - zoom_sensitivity;
 
         // Keep the mouse position pointing at the same position
         auto old_mouse_grid = ScreenToGridPos(mouse_pos);
@@ -101,8 +112,8 @@ private:
 
     void DrawGrid() 
     {
-        cellWidth = zoom * dx * gridScalling;
-        cellHeight = zoom * dy * gridScalling;
+        cellWidth = zoom * dx;
+        cellHeight = zoom * dy;
 
         // Draw grid lines
         for (int i = 0; i <= nx; ++i) 
@@ -120,7 +131,7 @@ private:
 
     void DrawVelocityVectors() 
     {
-        float scale = 300.0f * zoom;
+        float scale = velocityScale * zoom;
 
         for (int j = 1; j < ny - 1; ++j) 
         {
@@ -148,8 +159,8 @@ private:
     void DrawArrow(Vector2 start, Vector2 end, float scale, Color color)
     {
         float angle = atan2(end.y - start.y, end.x - start.x);
-        float arrowheadSize = scale / 6.0f;
-        float lineThickness = scale / 30.0f;
+        float arrowheadSize = scale / 2.0f;
+        float lineThickness = scale / 10.0f;
         float arrowHeadAngle = 0.4f;
 
         Vector2 arrowPoint1 = Vector2{ end.x - arrowheadSize * cos(angle - arrowHeadAngle), end.y - arrowheadSize * sin(angle - arrowHeadAngle) };
