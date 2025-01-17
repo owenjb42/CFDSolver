@@ -151,8 +151,8 @@ public:
         }
 
         //generateVectorFieldWithGrid(u, v);
-        auto plotter = CFDVisualizer(nx, ny, (float)dx, (float)dy, u, v, p);
-        plotter.Render();
+        //auto plotter = CFDVisualizer(nx, ny, (float)dx, (float)dy, u, v, p);
+        //plotter.Render();
     }
 
     // Simplified boundary conditions

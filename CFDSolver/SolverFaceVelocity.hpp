@@ -185,8 +185,8 @@ public:
         CalculateCellVelocities();
 
         // Plot Results
-        auto plotter = CFDVisualizer(nx, ny, (float)dx, (float)dy, cell_u, cell_v, p);
-        plotter.Render();
+        //auto plotter = CFDVisualizer(nx, ny, (float)dx, (float)dy, cell_u, cell_v, p);
+        //plotter.Render();
     }
 
     // Simplified boundary conditions

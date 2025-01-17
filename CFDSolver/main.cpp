@@ -4,11 +4,8 @@
 
 int main()
 {
-	Solver s(5, 5, 0.01, 0.01);
-	s.solve(20000);
+	SolverStaggered s(100, 100, 0.01, 0.01);
+	s.solve(4000);
 	
-	//SolverFaceVelocity s(50, 50, 0.01, 0.01);
-	//s.solve(20000);
-
 	return 0;
 }

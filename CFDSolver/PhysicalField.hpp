@@ -28,6 +28,11 @@ public:
 		return tmp;
 	}
 
+	void reset()
+	{
+		for (auto& value : values) value = 0.0;
+	}
+
 	int nx, ny;
 	std::vector<double> values;
 };
