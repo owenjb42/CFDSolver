@@ -4,8 +4,8 @@
 
 int main()
 {
-	SolverStaggered s(100, 100, 0.01, 0.01);
-	s.solve(4000);
+	SolverStaggered s(100, 100, 0.005, 0.005);
+	s.solve(10000);
 	
 	return 0;
 }

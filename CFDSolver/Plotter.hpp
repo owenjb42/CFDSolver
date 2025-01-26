@@ -10,20 +10,13 @@
 
 class CFDVisualizer {
 public:
-    CFDVisualizer(int nx, int ny, float dx, float dy, const PhysicalField& u, const PhysicalField& v, const PhysicalField& p, FairMutex& cell_data_mutex)
-        : nx(nx), ny(ny), dx(dx), dy(dy), u(u), v(v), p(p), mutex(cell_data_mutex)
+    CFDVisualizer(int nx, int ny, float dx, float dy, const PhysicalField& u, const PhysicalField& v, const PhysicalField& u_face, const PhysicalField& v_face, const PhysicalField& p, FairMutex& cell_data_mutex)
+        : nx(nx), ny(ny), dx(dx), dy(dy), u(u), v(v), u_face(u_face), v_face(v_face), p(p), mutex(cell_data_mutex)
     {
         SetTraceLogLevel(LOG_ERROR);
         SetConfigFlags(FLAG_WINDOW_RESIZABLE);
         InitWindow(1000, 1000, "CFD Simulation Visualization");
         SetTargetFPS(60);
-
-        minPressure = *std::ranges::min_element(p.values);
-        maxPressure = *std::ranges::max_element(p.values);
-
-        double max_scale = std::max(nx * dx / 1000, ny * dy / 1000);
-        zoom = 1 / max_scale;
-        velocityScale = 1000.0f * max_scale;
     }
 
     ~CFDVisualizer() 
@@ -33,7 +26,14 @@ public:
 
     void Render() 
     {
-        GenerateStreamlines(100, 5000, 0.1);
+        minPressure = *std::ranges::min_element(p.values);
+        maxPressure = *std::ranges::max_element(p.values);
+
+        double max_scale = std::max(nx * dx / 1000, ny * dy / 1000);
+        zoom = 1 / max_scale;
+        velocityScale = 1000.0f * max_scale;
+
+        GenerateStreamlines(100, 1000, 0.1);
 
         while (true)
         {
@@ -45,8 +45,9 @@ public:
             ClearBackground(RAYWHITE);
 
             DrawField(p, minPressure, maxPressure);
-            DrawGrid();
-            //DrawVelocityVectors();
+            //DrawGrid();
+
+            DrawVelocityVectors();
             DrawStreamlines();
 
             EndDrawing();
@@ -54,12 +55,14 @@ public:
     }
 
 private:
+    FairMutex& mutex;
+
     // Result infomation
     int nx, ny;
     float dx, dy;
-    FairMutex& mutex;
-    const PhysicalField& u, & v, & p;
-    int cellWidth{ 0 }, cellHeight{ 0 };
+    const PhysicalField& u, &v, &p, &u_face, &v_face;
+    
+    float cellWidth{ 0 }, cellHeight{ 0 };
 
     // Render settings
     float offsetX{ 0 }, offsetY{ 0 }; // offset in the screen co-ords
@@ -92,6 +95,9 @@ private:
         offsetX -= (old_mouse_grid.x - new_mouse_grid.x) * zoom;
         offsetY -= (old_mouse_grid.y - new_mouse_grid.y) * zoom;
 
+        cellWidth = zoom * dx;
+        cellHeight = zoom * dy;
+
         // Pan using right mouse button drag
         if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) 
         {
@@ -113,22 +119,23 @@ private:
 
     void DrawGrid() 
     {
-        cellWidth = zoom * dx;
-        cellHeight = zoom * dy;
-
         // Draw grid lines
         for (int i = 0; i <= nx; ++i) 
         {
             float xPos = i * cellWidth + offsetX;
-            DrawLine(xPos, offsetY, xPos, offsetY + ny * cellHeight, GRAY);
+            DrawLineV({ xPos, offsetY }, { xPos, offsetY + ny * cellHeight }, GRAY);
         }
 
         for (int j = 0; j <= ny; ++j) 
         {
             float yPos = j * cellHeight + offsetY;
-            DrawLine(offsetX, yPos, offsetX + nx * cellWidth, yPos, GRAY);
+            DrawLineV({ offsetX, yPos }, { offsetX + nx * cellWidth, yPos }, GRAY);
         }
     }
+
+    /// <summary>
+    /// Velocity vector code
+    /// </summary>
 
     void DrawVelocityVectors() 
     {
@@ -166,6 +173,10 @@ private:
         DrawTriangle(arrowPoint1, arrowPoint2, arrowPoint3, color);
     }
 
+    /// <summary>
+    /// Result plot code
+    /// </summary>
+
     void DrawField(const PhysicalField& f, double minValue, double maxValue)
     {
         for (int j = 0; j < ny; ++j) 
@@ -180,7 +191,7 @@ private:
                 // Draw a rectangle for each cell representing the value
                 float xPos = i * cellWidth + offsetX;
                 float yPos = j * cellHeight + offsetY;
-                DrawRectangle(xPos, yPos, cellWidth, cellHeight, color);
+                DrawRectangleV({ xPos, yPos }, { cellWidth, cellHeight }, color);
             }
         }
     }
@@ -196,8 +207,13 @@ private:
                      0, 255 };
     }
 
+    /// <summary>
+    /// Streamline Code
+    /// </summary>
+
     struct Streamline
     {
+        bool is_reverse{ false };
         std::vector<Vector2> points;
     };
 
@@ -207,11 +223,14 @@ private:
     {
         auto sampleVelocity = [&](float x, float y) -> Vector2 
         {
+            if (x <= 0.5f || y <= 0.5f || x >= nx - 0.5f || y >= ny - 0.5f)
+                return { 0.0f, 0.0f }; // Out of bounds
+
+            x -= 0.5f;
+            y -= 0.5f;
+
             int i = static_cast<int>(x);
             int j = static_cast<int>(y);
-
-            if (i < 0 || j < 0 || i >= nx - 1 || j >= ny - 1)
-                return { 0.0f, 0.0f }; // Out of bounds
 
             // Bilinear interpolation
             float tx = x - i;
@@ -233,8 +252,11 @@ private:
         for (int seed = 0; seed < numSeeds; ++seed) 
         {
             // Generate random seed points within the field
-            float x = GetRandomValue(0, nx - 1);
-            float y = GetRandomValue(0, ny - 1);
+            float x = GetRandomValue(0, nx);
+            float y = GetRandomValue(0, ny);
+
+            bool reverse = GetRandomValue(0, 1) > 0.5f;
+            float sign = reverse ? -1.0f : 1.0f;
 
             Streamline streamline;
 
@@ -250,8 +272,8 @@ private:
                 // Normalize velocity and move
                 velocity = { velocity.x * (stepSize / magnitude), velocity.y * (stepSize / magnitude) };
 
-                float nextX = x + velocity.x;
-                float nextY = y + velocity.y;
+                float nextX = x + sign * velocity.x;
+                float nextY = y + sign * velocity.y;
 
                 // Store point in streamline
                 streamline.points.push_back(Vector2{ x*dx, y*dy });
@@ -263,7 +285,7 @@ private:
                 if (x <= 0 || y <= 0 || x >= nx || y >= ny)
                     break;
             }
-
+            streamline.is_reverse = reverse;
             streamlines.push_back(streamline);
         }
     }
@@ -282,6 +304,30 @@ private:
                     otherScreenPoint.x, otherScreenPoint.y,
                     BLACK
                 );
+
+                //if ((i + 5) % 10 == 0)
+                //{
+                //    if (streamline.is_reverse) std::swap(screenPoint, otherScreenPoint);
+                //
+                //    float arrowAngle = PI / 6;
+                //    float angle = atan2(screenPoint.y - otherScreenPoint.y, screenPoint.x - otherScreenPoint.x);
+                //    float scale = zoom * 0.0005;
+                //
+                //    Vector2 arrowPoint2 = Vector2{ screenPoint.x - scale * cos(angle + arrowAngle), screenPoint.y - scale * sin(angle + arrowAngle) };
+                //    Vector2 arrowPoint3 = Vector2{ screenPoint.x - scale * cos(angle - arrowAngle), screenPoint.y - scale * sin(angle - arrowAngle) };
+                //
+                //    DrawLine(
+                //        screenPoint.x, screenPoint.y,
+                //        arrowPoint2.x, arrowPoint2.y,
+                //        BLACK
+                //    );
+                //
+                //    DrawLine(
+                //        screenPoint.x, screenPoint.y,
+                //        arrowPoint3.x, arrowPoint3.y,
+                //        BLACK
+                //    );
+                //}
             }
         }
     }
