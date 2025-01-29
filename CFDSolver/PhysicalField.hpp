@@ -6,8 +6,8 @@ class PhysicalField
 public:
 	PhysicalField(int nx, int ny) : nx(nx), ny(ny) { values.resize(nx * ny); }
 
-	const double& operator() (int i, int j) const { return values[i + nx * j]; }
-	double& operator() (int i, int j) { return values[i + nx * j]; }
+	inline const double& operator() (int i, int j) const { return values[i + nx * j]; }
+	inline double& operator() (int i, int j) { return values[i + nx * j]; }
 
 	std::vector<double>::iterator begin() { return values.begin(); }
 	std::vector<double>::iterator end() { return values.end(); }

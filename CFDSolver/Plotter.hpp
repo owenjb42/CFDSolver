@@ -10,8 +10,8 @@
 
 class CFDVisualizer {
 public:
-    CFDVisualizer(int nx, int ny, float dx, float dy, const PhysicalField& u, const PhysicalField& v, const PhysicalField& u_face, const PhysicalField& v_face, const PhysicalField& p, FairMutex& cell_data_mutex)
-        : nx(nx), ny(ny), dx(dx), dy(dy), u(u), v(v), u_face(u_face), v_face(v_face), p(p), mutex(cell_data_mutex)
+    CFDVisualizer(int nx, int ny, float dx, float dy, const PhysicalField& u, const PhysicalField& v, const PhysicalField& u_face, const PhysicalField& v_face, const PhysicalField& p, const PhysicalField& divergence, FairMutex& cell_data_mutex)
+        : nx(nx), ny(ny), dx(dx), dy(dy), u(u), v(v), u_face(u_face), v_face(v_face), p(p), divergence(divergence), mutex(cell_data_mutex)
     {
         SetTraceLogLevel(LOG_ERROR);
         SetConfigFlags(FLAG_WINDOW_RESIZABLE);
@@ -28,12 +28,31 @@ public:
     {
         minPressure = *std::ranges::min_element(p.values);
         maxPressure = *std::ranges::max_element(p.values);
+        
+        double minDivergence = *std::ranges::min_element(divergence.values);
+        double maxDivergence = *std::ranges::max_element(divergence.values);
+        std::cout << "\n" << minDivergence << "|" << maxDivergence;
+        double minMaxDivergence = std::max(std::abs(minDivergence), std::abs(maxDivergence));
+
+        for (int j = 0; j < ny; ++j)
+        {
+            for (int i = 0; i < nx; ++i)
+            {
+                float uVal = static_cast<float>(u(i, j));
+                float vVal = static_cast<float>(v(i, j));
+
+                // Calculate the magnitude and apply logarithmic scaling
+                float magnitude = sqrt(uVal * uVal + vVal * vVal);
+                if (magnitude > maxVelocity) maxVelocity = magnitude;
+                if (magnitude < minVelocity) minVelocity = magnitude;
+            }
+        }
 
         double max_scale = std::max(nx * dx / 1000, ny * dy / 1000);
         zoom = 1 / max_scale;
         velocityScale = 1000.0f * max_scale;
 
-        GenerateStreamlines(100, 1000, 0.1);
+        GenerateStreamlines(1000, 500, 0.1);
 
         while (true)
         {
@@ -45,7 +64,8 @@ public:
             ClearBackground(RAYWHITE);
 
             DrawField(p, minPressure, maxPressure);
-            //DrawGrid();
+            //DrawField(divergence, -minMaxDivergence, minMaxDivergence);
+            DrawGrid();
 
             DrawVelocityVectors();
             DrawStreamlines();
@@ -60,7 +80,7 @@ private:
     // Result infomation
     int nx, ny;
     float dx, dy;
-    const PhysicalField& u, &v, &p, &u_face, &v_face;
+    const PhysicalField& u, &v, &p, &divergence, &u_face, &v_face;
     
     float cellWidth{ 0 }, cellHeight{ 0 };
 
@@ -72,6 +92,7 @@ private:
     float velocityScale{ 300.0f };
 
     float minPressure{ 0.0 }, maxPressure{ 0.0 };
+    float minVelocity{ std::numeric_limits<float>::max() }, maxVelocity{ std::numeric_limits<float>::lowest() };
 
     void HandleInput() 
     {
@@ -151,13 +172,13 @@ private:
                 // Calculate the magnitude and apply logarithmic scaling
                 float magnitude = sqrt(uVal * uVal + vVal * vVal);
                 uVal /= magnitude; vVal /= magnitude;
-                if (magnitude > 0) { magnitude = log10(magnitude + 1.0f); }
+                float logMagnitude = log10(magnitude + 1.0f);
 
                 // Calculate the starting position of the vector (center of the cell)
                 float xPos = i * cellWidth + cellWidth / 2 + offsetX;
                 float yPos = j * cellHeight + cellHeight / 2 + offsetY;
                 
-                DrawArrowHead(Vector2{ (float)xPos, (float)yPos }, Vector2{ (float)uVal, (float)vVal }, magnitude * scale, BLACK);
+                DrawArrowHead(Vector2{ (float)xPos, (float)yPos }, Vector2{ (float)uVal, (float)vVal }, logMagnitude * scale, MapToColorVector(magnitude, minVelocity, maxVelocity));
             }
         }
     }
@@ -171,19 +192,34 @@ private:
         Vector2 arrowPoint2 = Vector2{ centre.x - scale * cos(angle + arrowHeadAngle), centre.y - scale * sin(angle + arrowHeadAngle) };
         Vector2 arrowPoint3 = Vector2{ centre.x - scale * cos(angle - arrowHeadAngle), centre.y - scale * sin(angle - arrowHeadAngle) };
         DrawTriangle(arrowPoint1, arrowPoint2, arrowPoint3, color);
+        DrawTriangleLines(arrowPoint1, arrowPoint2, arrowPoint3, BLACK);
+    }
+
+    Color MapToColorVector(float value, float minValue, float maxValue)
+    {
+        if (std::isnan(value) || value < minValue || value > maxValue)
+            return WHITE;
+
+        float normalized = (value - minValue) / (maxValue - minValue);
+
+        float r = std::clamp(1.5 - std::abs(4.0 * normalized - 3.0), 0.0, 1.0);
+        float g = std::clamp(1.5 - std::abs(4.0 * normalized - 2.0), 0.0, 1.0);
+        float b = std::clamp(1.5 - std::abs(4.0 * normalized - 1.0), 0.0, 1.0);
+
+        return Color{ (unsigned char)(255 * r), (unsigned char)(255 * g), (unsigned char)(255 * b), 255 };
     }
 
     /// <summary>
     /// Result plot code
     /// </summary>
 
-    void DrawField(const PhysicalField& f, double minValue, double maxValue)
+    void DrawField(const PhysicalField& f, float minValue, float maxValue)
     {
         for (int j = 0; j < ny; ++j) 
         {
             for (int i = 0; i < nx; ++i) 
             {
-                double value = f(i, j);
+                float value = f(i, j);
 
                 // Map the value to a color (heatmap)
                 Color color = MapToColor(value, minValue, maxValue);
@@ -196,7 +232,7 @@ private:
         }
     }
 
-    Color MapToColor(double value, double minValue, double maxValue)
+    Color MapToColor(float value, float minValue, float maxValue)
     {
         // Map the pressure value to a color (blue = low, red = high)
         float normValue = static_cast<float>(value);

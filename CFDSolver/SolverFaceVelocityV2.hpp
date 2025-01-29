@@ -229,6 +229,7 @@ public:
 
     void SolvePressure()
     {
+        //ApplyPressureBoundaryConditions();
         for (int itter = 0; itter < innerPressureItterations; ++itter)
         {
             p_correction_old = p_correction;
@@ -260,8 +261,7 @@ public:
                 p(i, j) += p_correction(i, j);
             }
         }
-
-        //ApplyPressureBoundaryConditions();
+        ApplyPressureBoundaryConditions();
     }
 
     void ApplyPressureCorrection()
@@ -285,19 +285,19 @@ public:
 
     void SolveVelocitiesForMomentumEquation()
     {
-        for (int i = 1; i < nx; ++i)
+        for (int i = 0; i < nx + 1; ++i)
         {
             for (int j = 0; j < ny; ++j)
             {
-                u(i, j) = u_old(i, j) + dt * (u_flux(i, j) + u_dif(i, j) + u_scr(i, j)/* + (p(i - 1, j) - p(i, j)) / dy*/);
+                u(i, j) += dt * (u_flux(i, j) + u_dif(i, j) + u_scr(i, j)/* + (p(i - 1, j) - p(i, j)) / dy*/);
             }
         }
         for (int i = 0; i < nx; ++i)
         {
-            for (int j = 1; j < ny; ++j)
+            for (int j = 0; j < ny + 1; ++j)
             {
 
-                v(i, j) = v_old(i, j) + dt * (v_flux(i, j) + v_dif(i, j) + v_scr(i, j)/* + (p(i, j - 1) - p(i, j)) / dx*/);
+                v(i, j) += dt * (v_flux(i, j) + v_dif(i, j) + v_scr(i, j)/* + (p(i, j - 1) - p(i, j)) / dx*/);
             }
         }
     }
@@ -310,10 +310,7 @@ public:
 
         for (int iter = 0; iter < num_iterations; ++iter) 
         {
-            // Store old fields and reset fluxes
-            u_old = u;//swap
-            v_old = v;//swap
-            p_previous = p;//swap
+            p_previous = p;
             v_flux.reset();
             u_flux.reset();
             v_dif.reset();
@@ -336,23 +333,26 @@ public:
 
             ApplyPressureCorrection();
 
-            // Check Residuals
+            // Check Residual
             if (iter % 5 == 0)
             {
                 double maxResidual{ 0.0 };
                 for (int i = 0; i < p.values.size(); ++i)
                 {
-                    double residual = (p.values[i] - p_previous.values[i]) / (p.values[i] + 1e-20);
+                    double residual = std::abs((p.values[i] - p_previous.values[i]) / (p.values[i] + 1e-20));
                     maxResidual = std::max(maxResidual, residual);
                 }
-                printf("\rIteration: %d | Pressure Residual: %f  ", iter, maxResidual);
-                if (maxResidual < residualLimit && iter > 2) break;
+                double maxDivergence = std::max(std::abs(*std::ranges::min_element(divergence.values)), std::abs(*std::ranges::max_element(divergence.values)));
+
+                printf("\rIteration: %d | Pressure Residual: %.3e | Max Abs Divergence %.3e   ", iter, maxResidual, maxDivergence);
+                if ((maxResidual < residualLimit) && (maxDivergence < divergenceLimit) && (iter > 2))
+                    break;
             }
         }
 
         CalculateCellVelocities();
 
-        auto plotter = CFDVisualizer(nx, ny, (float)dx, (float)dy, cell_u, cell_v, u, v, p, cell_data_mutex);
+        auto plotter = CFDVisualizer(nx, ny, (float)dx, (float)dy, cell_u, cell_v, u, v, p, divergence, cell_data_mutex);
         plotter.Render();
     }
 
@@ -362,7 +362,7 @@ public:
         for (int i = 1; i < nx; ++i)
         {
             // Top boundary
-            u_scr(i, 0) = (1.0 - u(i, 0));
+            u_scr(i, 0) = (0.0 - u(i, 0));
 
             // Bottom boundary
             u_scr(i, ny - 1) = (0.0 - u(i, ny - 1));
@@ -376,33 +376,16 @@ public:
             v_scr(nx - 1, j) = (0.0 - v(nx - 1, j));
         }
 
-        //u_scr(0, ny / 2) = u_scr(nx, ny / 2) = 1.0;
+        for (int j = 0.9*ny; j < ny; ++j) u_scr(0, j) = 1.0;
+        for (int i = 0.9*nx; i < nx; ++i) v_scr(i, ny) = 1.0;
+        //u(0, 0) = 1.0;
+        //u(nx, ny - 1) = 1.0;
     }
 
     void ApplyPressureBoundaryConditions()
     {
-        for (int j = 1; j < ny - 1; ++j)
-        {
-            // Left boundary
-            p(0, j) = p(1, j);
-
-            // Right boundary
-            p(nx - 1, j) = p(nx - 2, j);
-        }
-
-        for (int i = 1; i < nx - 1; ++i)
-        {
-            // Top boundary
-            p(i, 0) = p(i, 1);
-
-            // Bottom boundary
-            p(i, ny - 1) = p(i, ny - 2);
-        }
-
-        p(0, 0) = (p(0, 1) + p(1, 0)) / 2.0;
-        p(nx - 1, 0) = (p(nx - 1, 1) + p(nx - 2, 0)) / 2.0;
-        p(0, ny - 1) = (p(0, ny - 2) + p(1, ny - 1)) / 2.0;
-        p(nx - 1, ny - 1) = (p(nx - 1, ny - 2) + p(nx - 2, ny - 1)) / 2.0;
+        //p_scr(0, ny / 2) = 0.0;
+        //p_scr(nx - 1, ny / 2) = 0.0;
     }
 
     struct FluidProperties
@@ -415,14 +398,14 @@ public:
 
     int nx, ny;
     double dx, dy;
-    double dt{ 0.00001 };
-
-    //double relaxation{ 0.0 };
+    double dt{ 10e-7 };
 
     int innerPressureItterations{ 20 };
-    double residualLimit{ 0.000001 };
+    double residualLimit{ 10e-7 };
+    double divergenceLimit{ 10e-10 };
 
     PhysicalField p{ nx, ny };
+    PhysicalField p_scr{ nx, ny };
     PhysicalField p_previous{ nx, ny };
     PhysicalField p_correction{ nx, ny };
     PhysicalField p_correction_old{ nx, ny };
@@ -431,7 +414,6 @@ public:
     PhysicalField cell_v{ nx, ny };
 
     PhysicalField u{ nx + 1, ny }, v{ nx, ny + 1 }; // staggered grid
-    PhysicalField u_old{ nx + 1, ny }, v_old{ nx, ny + 1 }; // staggered grid
 
     PhysicalField divergence{ nx, ny };
 
@@ -448,4 +430,11 @@ public:
     PhysicalField v_coeff{ nx, ny + 1 }; // staggered grid
 
     FairMutex cell_data_mutex;
+
+    // TODO
+    // - blocked cells / faces
+    // - inlet velocity boundary (what are the pressure conditions)
+    // - friction
+    // - turbulance
+    // - plot divergence as it should be zero
 };
