@@ -42,52 +42,76 @@ public:
         {
             for (int j = 0; j < ny; ++j)
             {
-                // Inline Left: u flux
-                flux = dy * ((u(i, j) + u(i - 1, j)) / 2.0);
-                value = flux >= 0.0 ? u(i - 1, j) : u(i, j);
-                coeff = flux / (dx * dy);
-                u_flux(i, j) += coeff * value;
-                u_coeff(i, j) += coeff;
+                //if (i != 0)
+                {
+                    // Inline Left: u flux
+                    flux = dy * ((u(i, j) + u(i - 1, j)) / 2.0);
+                    //if (massFlux > 0.0)
+                    {
+                        value = flux >= 0.0 ? u(i - 1, j) : u(i, j);
+                        coeff = flux / (dx * dy);
+                        u_coeff(i, j) += coeff;
+                        u_flux(i, j) += coeff * value;
+                    }
+                }
 
-                // Inline Right: u flux
-                flux = dy * -((u(i, j) + u(i + 1, j)) / 2.0);
-                value = flux >= 0.0 ? u(i + 1, j) : u(i, j);
-                coeff = flux / (dx * dy);
-                u_flux(i, j) += coeff * value;
-                u_coeff(i, j) += coeff;
+                //if (i != nx - 1)
+                {
+                    // Inline Right: u flux
+                    flux = dy * -((u(i, j) + u(i + 1, j)) / 2.0);
+                    //if (massFlux > 0.0)
+                    {
+                        value = flux >= 0.0 ? u(i + 1, j) : u(i, j);
+                        coeff = flux / (dx * dy);
+                        u_coeff(i, j) += coeff;
+                        u_flux(i, j) += coeff * value;
+                    }
+                }
 
                 if (j != 0)
                 {
                     // Bottom Left: u flux
                     flux = (dx / 2.0) * v(i - 1, j);
-                    value = flux >= 0.0 ? u(i, j - 1) : u(i, j);
-                    coeff = flux / (dx * dy);
-                    u_flux(i, j) += coeff * value;
-                    u_coeff(i, j) += coeff;
+                    //if (massFlux > 0.0)
+                    {
+                        value = flux >= 0.0 ? u(i, j - 1) : u(i, j);
+                        coeff = flux / (dx * dy);
+                        u_coeff(i, j) += coeff;
+                        u_flux(i, j) += coeff * value;
+                    }
 
                     // Bottom Right: u flux
                     flux = (dx / 2.0) * v(i, j);
-                    value = flux >= 0.0 ? u(i, j - 1) : u(i, j);
-                    coeff = flux / (dx * dy);
-                    u_flux(i, j) += coeff * value;
-                    u_coeff(i, j) += coeff;
+                    //if (massFlux > 0.0)
+                    {
+                        value = flux >= 0.0 ? u(i, j - 1) : u(i, j);
+                        coeff = flux / (dx * dy);
+                        u_coeff(i, j) += coeff;
+                        u_flux(i, j) += coeff * value;
+                    }
                 }
 
                 if (j != ny - 1)
                 {
                     // Top Left: u flux
                     flux = -(dx / 2.0) * v(i - 1, j + 1);
-                    value = flux >= 0.0 ? u(i, j + 1) : u(i, j);
-                    coeff = flux / (dx * dy);
-                    u_flux(i, j) += coeff * value;
-                    u_coeff(i, j) += coeff;
+                    //if (massFlux > 0.0)
+                    {
+                        value = flux >= 0.0 ? u(i, j + 1) : u(i, j);
+                        coeff = flux / (dx * dy);
+                        u_coeff(i, j) += coeff;
+                        u_flux(i, j) += coeff * value;
+                    }
 
                     // Top Right: u flux
                     flux = -(dx / 2.0) * v(i, j + 1);
-                    value = flux >= 0.0 ? u(i, j + 1) : u(i, j);
-                    coeff = flux / (dx * dy);
-                    u_flux(i, j) += coeff * value;
-                    u_coeff(i, j) += coeff;
+                    //if (massFlux > 0.0)
+                    {
+                        value = flux >= 0.0 ? u(i, j + 1) : u(i, j);
+                        coeff = flux / (dx * dy);
+                        u_coeff(i, j) += coeff;
+                        u_flux(i, j) += coeff * value;
+                    }
                 }
             }
         }
@@ -96,88 +120,117 @@ public:
         {
             for (int j = 1; j < ny; ++j)
             {
-                // Inline Left: v flux
-                flux = dy * ((v(i, j) + v(i, j - 1)) / 2.0);
-                value = flux >= 0.0 ? v(i, j - 1) : v(i, j);
-                coeff = flux / (dx * dy);
-                v_flux(i, j) += coeff * value;
-                v_coeff(i, j) += coeff;
+                //if (j != 0)
+                {
+                    // Inline Left: v flux
+                    flux = dy * ((v(i, j) + v(i, j - 1)) / 2.0);
+                    //if (massFlux > 0.0)
+                    {
+                        value = flux >= 0.0 ? v(i, j - 1) : v(i, j);
+                        coeff = flux / (dx * dy);
+                        v_coeff(i, j) += coeff;
+                        v_flux(i, j) += coeff * value;
+                    }
+                }
 
-                // Inline Right: v flux
-                flux = dy * -((v(i, j) + v(i, j + 1)) / 2.0);
-                value = flux >= 0.0 ? v(i, j + 1) : v(i, j);
-                coeff = flux / (dx * dy);
-                v_flux(i, j) += coeff * value;
-                v_coeff(i, j) += coeff;
+                //if (j != ny - 1)
+                {
+                    // Inline Right: v flux
+                    flux = dy * -((v(i, j) + v(i, j + 1)) / 2.0);
+                    //if (massFlux > 0.0)
+                    {
+                        value = flux >= 0.0 ? v(i, j + 1) : v(i, j);
+                        coeff = flux / (dx * dy);
+                        v_coeff(i, j) += coeff;
+                        v_flux(i, j) += coeff * value;
+                    }
+                }
 
                 if (i != 0)
                 {
                     // Bottom Left: v flux
                     flux = (dy / 2.0) * u(i, j - 1);
-                    value = flux >= 0.0 ? v(i - 1, j) : v(i, j);
-                    coeff = flux / (dx * dy);
-                    v_flux(i, j) += coeff * value;
-                    v_coeff(i, j) += coeff;
+                    //if (massFlux > 0.0)
+                    {
+                        value = flux >= 0.0 ? v(i - 1, j) : v(i, j);
+                        coeff = flux / (dx * dy);
+                        v_coeff(i, j) += coeff;
+                        v_flux(i, j) += coeff * value;
+                    }
 
                     // Bottom Right: v flux
                     flux = (dy / 2.0) * u(i, j);
-                    value = flux >= 0.0 ? v(i - 1, j) : v(i, j);
-                    coeff = flux / (dx * dy);
-                    v_flux(i, j) += coeff * value;
-                    v_coeff(i, j) += coeff;
+                    //if (massFlux > 0.0)
+                    {
+                        value = flux >= 0.0 ? v(i - 1, j) : v(i, j);
+                        coeff = flux / (dx * dy);
+                        v_coeff(i, j) += coeff;
+                        v_flux(i, j) += coeff * value;
+                    }
                 }
 
                 if (i != nx - 1)
                 {
                     // Top Left: v flux
                     flux = -(dy / 2.0) * u(i + 1, j - 1);
-                    value = flux >= 0.0 ? v(i + 1, j) : v(i, j);
-                    coeff = flux / (dx * dy);
-                    v_flux(i, j) += coeff * value;
-                    v_coeff(i, j) += coeff;
+                    //if (massFlux > 0.0)
+                    {
+                        value = flux >= 0.0 ? v(i + 1, j) : v(i, j);
+                        coeff = flux / (dx * dy);
+                        v_coeff(i, j) += coeff;
+                        v_flux(i, j) += coeff * value;
+                    }
 
                     // Top Right: v flux
                     flux = -(dy / 2.0) * u(i + 1, j);
-                    value = flux >= 0.0 ? v(i + 1, j) : v(i, j);
-                    coeff = flux / (dx * dy);
-                    v_flux(i, j) += coeff * value;
-                    v_coeff(i, j) += coeff;
+                    //if (massFlux > 0.0)
+                    {
+                        value = flux >= 0.0 ? v(i + 1, j) : v(i, j);
+                        coeff = flux / (dx * dy);
+                        v_coeff(i, j) += coeff;
+                        v_flux(i, j) += coeff * value;
+                    }
                 }
             }
         }
     }
 
-    void ComputeDiffusiveTerms() 
+    void ComputeDiffusiveTerms()  // are we adding boundary faces - maybe best to add the blocked face check now
     {
         double coeff = 0.0;
+        double value = 0.0;
         for (int i = 1; i < nx; ++i)
         {
             for (int j = 0; j < ny; ++j)
             {
                 // Inline Left: u diff
-                coeff = fluid.kinematic_viscosity * (dy / dx) / (dx * dy);
-                u_dif(i, j) += coeff * (u(i - 1, j) - u(i, j));
+                coeff = fluid.kinematic_viscosity / (dx * dx);
+                value = (u(i - 1, j) - u(i, j));
                 u_coeff(i, j) += coeff;
+                u_dif(i, j) += coeff * value;
 
                 // Inline Right: u diff
-                coeff = fluid.kinematic_viscosity * (dy / dx) / (dx * dy);
-                u_dif(i, j) += coeff * (u(i + 1, j) - u(i, j));
+                coeff = fluid.kinematic_viscosity / (dx * dx);
+                value = (u(i + 1, j) - u(i, j));
                 u_coeff(i, j) += coeff;
+                u_dif(i, j) += coeff * value;
 
                 if (j != 0)
                 {
                     // Bottom: u diff
-                    coeff = fluid.kinematic_viscosity * (dx / dy) / (dx * dy);
-                    u_dif(i, j) += coeff * (u(i, j - 1) - u(i, j));
+                    coeff = fluid.kinematic_viscosity / (dy * dy);
+                    value = (u(i, j - 1) - u(i, j));
                     u_coeff(i, j) += coeff;
+                    u_dif(i, j) += coeff * value;
                 }
 
                 if (j != ny - 1)
                 {
                     // Top: u diff
-                    coeff = fluid.kinematic_viscosity * (dx / dy) / (dx * dy);
-                    u_dif(i, j) += coeff * (u(i, j + 1) - u(i, j));
+                    coeff = fluid.kinematic_viscosity / (dy * dy);
+                    value = (u(i, j + 1) - u(i, j));
                     u_coeff(i, j) += coeff;
+                    u_dif(i, j) += coeff * value;
                 }
             }
         }
@@ -187,29 +240,33 @@ public:
             for (int j = 1; j < ny; ++j)
             {
                 // Inline Left: v diff
-                coeff = fluid.kinematic_viscosity * (dx / dy) / (dx * dy);
-                v_dif(i, j) += coeff * (v(i, j - 1) - v(i, j));
+                coeff = fluid.kinematic_viscosity / (dy * dy);
+                value = (v(i, j - 1) - v(i, j));
                 v_coeff(i, j) += coeff;
+                v_dif(i, j) += coeff * value;
 
                 // Inline Right: v diff
-                coeff = fluid.kinematic_viscosity * (dx / dy) / (dx * dy);
-                v_dif(i, j) += coeff * (v(i, j + 1) - v(i, j));
+                coeff = fluid.kinematic_viscosity / (dy * dy);
+                value = (v(i, j + 1) - v(i, j));
                 v_coeff(i, j) += coeff;
+                v_dif(i, j) += coeff * value;
 
                 if (i != 0)
                 {
                     // Bottom: v diff
-                    coeff = fluid.kinematic_viscosity * (dy / dx) / (dx * dy);
-                    v_dif(i, j) += coeff * (v(i - 1, j) - v(i, j));
+                    coeff = fluid.kinematic_viscosity / (dx * dx);
+                    value = (v(i - 1, j) - v(i, j));
                     v_coeff(i, j) += coeff;
+                    v_dif(i, j) += coeff * value;
                 }
 
                 if (i != nx - 1)
                 {
                     // Top: v diff
-                    coeff = fluid.kinematic_viscosity * (dy / dx) / (dx * dy);
-                    v_dif(i, j) += coeff * (v(i + 1, j) - v(i, j));
+                    coeff = fluid.kinematic_viscosity/ (dx * dx);
+                    value = (v(i + 1, j) - v(i, j));
                     v_coeff(i, j) += coeff;
+                    v_dif(i, j) += coeff * value;
                 }
             }
         }
@@ -229,7 +286,6 @@ public:
 
     void SolvePressure()
     {
-        //ApplyPressureBoundaryConditions();
         for (int itter = 0; itter < innerPressureItterations; ++itter)
         {
             p_correction_old = p_correction;
@@ -258,13 +314,12 @@ public:
         {
             for (int j = 0; j < ny; ++j)
             {
-                p(i, j) += p_correction(i, j);
+                p(i, j) += relaxation * p_correction(i, j);
             }
         }
-        ApplyPressureBoundaryConditions();
     }
 
-    void ApplyPressureCorrection()
+    void ApplyPressureCorrectionToVelocity()
     {
         for (int i = 1; i < nx; ++i) 
         {
@@ -285,7 +340,7 @@ public:
 
     void SolveVelocitiesForMomentumEquation()
     {
-        for (int i = 0; i < nx + 1; ++i)
+        for (int i = 1; i < nx; ++i)
         {
             for (int j = 0; j < ny; ++j)
             {
@@ -294,7 +349,7 @@ public:
         }
         for (int i = 0; i < nx; ++i)
         {
-            for (int j = 0; j < ny + 1; ++j)
+            for (int j = 1; j < ny; ++j)
             {
 
                 v(i, j) += dt * (v_flux(i, j) + v_dif(i, j) + v_scr(i, j)/* + (p(i, j - 1) - p(i, j)) / dx*/);
@@ -305,9 +360,6 @@ public:
     // Main time stepping method
     void solve(int num_iterations) 
     {
-        //auto plotter = CFDVisualizer(nx, ny, (float)dx, (float)dy, cell_u, cell_v, p, cell_data_mutex);
-        //auto plotterThread = std::jthread(&CFDVisualizer::Render, plotter);
-
         for (int iter = 0; iter < num_iterations; ++iter) 
         {
             p_previous = p;
@@ -315,6 +367,8 @@ public:
             u_flux.reset();
             v_dif.reset();
             u_dif.reset();
+            v_scr.reset();
+            u_scr.reset();
             p_correction.reset();
             u_coeff.reset();
             v_coeff.reset();
@@ -331,9 +385,9 @@ public:
 
             SolvePressure();
 
-            ApplyPressureCorrection();
+            ApplyPressureCorrectionToVelocity();
 
-            // Check Residual
+            // Check Residuals
             if (iter % 5 == 0)
             {
                 double maxResidual{ 0.0 };
@@ -359,33 +413,47 @@ public:
     // Simplified boundary conditions
     void ApplyVelocityBoundaryConditions() 
     {
+        double coeff = 0.0;
+
+        // Inflow
+        //double inflowVelocity = 1.0;
+        //double massFlux = inflowVelocity * fluid.density * dy;
+        //coeff = massFlux / (dx * dy);
+        //for (int j = 0; j < ny; ++j)
+        //{
+        //
+        //    //u_coeff(1, j) += coeff;
+        //    //u_scr(1, j) += coeff * inflowVelocity;
+        //    
+        //    //u_coeff(nx - 1, j) += coeff;
+        //    //u_scr(nx - 1, j) += coeff * inflowVelocity;
+        //
+        //    //u(1, j) = u(nx - 1, j) = 1.0;
+        //}
+
+        // Friction
+        coeff = fluid.kinematic_viscosity / (dy / 2);
         for (int i = 1; i < nx; ++i)
         {
             // Top boundary
-            u_scr(i, 0) = (0.0 - u(i, 0));
-
+            u_coeff(i, 0) += coeff;
+            u_scr(i, 0) += (1.0 - u(i, 0)) * coeff;
+        
             // Bottom boundary
-            u_scr(i, ny - 1) = (0.0 - u(i, ny - 1));
+            u_coeff(i, ny - 1) += coeff;
+            u_scr(i, ny - 1) += (0.0 - u(i, ny - 1)) * coeff;
         }
+        coeff = fluid.kinematic_viscosity / (dx / 2);
         for (int j = 1; j < ny; ++j)
         {
             // Left boundary
-            v_scr(0, j) = (0.0 - v(0, j));
-
+            v_coeff(0, j) += coeff;
+            v_scr(0, j) += (0.0 - v(0, j)) * coeff;
+        
             // Right boundary
-            v_scr(nx - 1, j) = (0.0 - v(nx - 1, j));
+            v_coeff(nx - 1, j) += coeff;
+            v_scr(nx - 1, j) += (0.0 - v(nx - 1, j)) * coeff;
         }
-
-        for (int j = 0.9*ny; j < ny; ++j) u_scr(0, j) = 1.0;
-        for (int i = 0.9*nx; i < nx; ++i) v_scr(i, ny) = 1.0;
-        //u(0, 0) = 1.0;
-        //u(nx, ny - 1) = 1.0;
-    }
-
-    void ApplyPressureBoundaryConditions()
-    {
-        //p_scr(0, ny / 2) = 0.0;
-        //p_scr(nx - 1, ny / 2) = 0.0;
     }
 
     struct FluidProperties
@@ -393,12 +461,12 @@ public:
         double density{ 1.0 };
         double kinematic_viscosity{ 0.1 };
     };
-
     FluidProperties fluid;
 
     int nx, ny;
     double dx, dy;
-    double dt{ 10e-7 };
+    double dt{ 10e-6 };
+    double relaxation{ 1.0 };
 
     int innerPressureItterations{ 20 };
     double residualLimit{ 10e-7 };

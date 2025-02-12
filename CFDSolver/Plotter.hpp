@@ -48,11 +48,13 @@ public:
             }
         }
 
+        std::cout << "\n" << minVelocity << "|" << maxVelocity;
+
         double max_scale = std::max(nx * dx / 1000, ny * dy / 1000);
         zoom = 1 / max_scale;
         velocityScale = 1000.0f * max_scale;
 
-        GenerateStreamlines(1000, 500, 0.1);
+        GenerateStreamlines(500, 500, 0.1);
 
         while (true)
         {
