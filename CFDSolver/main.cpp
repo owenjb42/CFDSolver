@@ -1,11 +1,11 @@
 #include "Solver.hpp"
-#include "SolverFaceVelocity.hpp"
-#include "SolverFaceVelocityV2.hpp"
+#include "Solver_Staggered_IMEX.hpp"
+#include "Solver_Staggered_IMEX_Temp.hpp"
 
 int main()
 {
-	SolverStaggered s(20, 20, 0.005, 0.005);
-	s.solve(100000);
+	SolverStaggeredIMEXTemp s(50, 50, 0.005, 0.005);
+	s.solve(20000);
 	
 	return 0;
 }

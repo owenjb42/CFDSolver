@@ -10,8 +10,8 @@
 
 class CFDVisualizer {
 public:
-    CFDVisualizer(int nx, int ny, float dx, float dy, const PhysicalField& u, const PhysicalField& v, const PhysicalField& u_face, const PhysicalField& v_face, const PhysicalField& p, const PhysicalField& divergence, FairMutex& cell_data_mutex)
-        : nx(nx), ny(ny), dx(dx), dy(dy), u(u), v(v), u_face(u_face), v_face(v_face), p(p), divergence(divergence), mutex(cell_data_mutex)
+    CFDVisualizer(int nx, int ny, float dx, float dy, const PhysicalField& u, const PhysicalField& v, const PhysicalField& u_face, const PhysicalField& v_face, const PhysicalField& p, const PhysicalField& t, const PhysicalField& divergence, FairMutex& cell_data_mutex)
+        : nx(nx), ny(ny), dx(dx), dy(dy), u(u), v(v), u_face(u_face), v_face(v_face), p(p), t(t), divergence(divergence), mutex(cell_data_mutex)
     {
         SetTraceLogLevel(LOG_ERROR);
         SetConfigFlags(FLAG_WINDOW_RESIZABLE);
@@ -28,6 +28,9 @@ public:
     {
         minPressure = *std::ranges::min_element(p.values);
         maxPressure = *std::ranges::max_element(p.values);
+
+        double minTemp = *std::ranges::min_element(t.values);
+        double maxTemp = *std::ranges::max_element(t.values);
         
         double minDivergence = *std::ranges::min_element(divergence.values);
         double maxDivergence = *std::ranges::max_element(divergence.values);
@@ -48,7 +51,7 @@ public:
             }
         }
 
-        std::cout << "\n" << minVelocity << "|" << maxVelocity;
+        std::cout << "\n" << minTemp << "|" << maxTemp;
 
         double max_scale = std::max(nx * dx / 1000, ny * dy / 1000);
         zoom = 1 / max_scale;
@@ -65,7 +68,8 @@ public:
             BeginDrawing();
             ClearBackground(RAYWHITE);
 
-            DrawField(p, minPressure, maxPressure);
+            DrawField(t, minTemp, maxTemp);
+            //DrawField(p, minPressure, maxPressure);
             //DrawField(divergence, -minMaxDivergence, minMaxDivergence);
             DrawGrid();
 
@@ -82,7 +86,7 @@ private:
     // Result infomation
     int nx, ny;
     float dx, dy;
-    const PhysicalField& u, &v, &p, &divergence, &u_face, &v_face;
+    const PhysicalField& u, &v, &p, &t, &divergence, &u_face, &v_face;
     
     float cellWidth{ 0 }, cellHeight{ 0 };
 
