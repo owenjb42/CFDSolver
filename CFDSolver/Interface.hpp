@@ -1,5 +1,6 @@
 #pragma once
 
+#include "raygui.h"
 #include "raylib.h"
 #include <vector>
 #include <unordered_set>
@@ -15,9 +16,17 @@ struct Face
     bool operator==(const Face& other) const = default;
     bool dir; int i; int j;
 };
+struct Boundary : public Face
+{
+    bool operator==(const Boundary& other) const { return Face::operator==(other); }
+    enum type{Fixed, Open};
+    double optional_velocity{ 0.0 }, optional_temp{ 0.0 };
+    bool boundary_dir{ 0 };// 0: +, 1: -
+};
 namespace std
 {
     template <> struct hash<Face> { size_t operator()(const Face& f) const { return (hash<bool>()(f.dir) ^ (hash<int>()(f.i) << 1) ^ (hash<int>()(f.j) << 2)); } };
+    template <> struct hash<Boundary> { size_t operator()(const Boundary& f) const { return (hash<bool>()(f.dir) ^ (hash<int>()(f.i) << 1) ^ (hash<int>()(f.j) << 2)); } };
 }
 
 class SolverStaggeredIMEXTemp;
@@ -124,12 +133,18 @@ public:
     // Model creator
     bool in_model_creator_mode{ false };
     float key_hold_time[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    bool text_box_edit_mode[2] = { false, false };
+
+    char velocity_input[32] = "1.0";
+    char temp_input[32] = "20.0";
+    bool direction_toggle = false;
 
     Vector2 drag_start{};
     bool dragging{ false };
 
     std::vector<Face> selected_faces;
     std::unordered_set<Face> blocked_faces;
+    std::unordered_set<Boundary> boundary_faces;
 
     // Result infomation
     int nx{ 5 }, ny{ 5 };
@@ -311,51 +326,58 @@ public:
         if (in_model_creator_mode)
         {
             int xoffset = 30, xsize = 150, ysize = 60;
-            Button btnBlocked = { {x1 + xoffset, current_y, xsize, ysize}, GRAY, "Blocked" };
-            Button btnOpen = { {x1 + width - xsize - xoffset, current_y, xsize, ysize}, GRAY, " Open" };
+
+            GuiSetStyle(DEFAULT, TEXT_SIZE, 20);
+            if (GuiButton(Rectangle(x1 + xoffset, current_y, xsize, ysize), "Blocked")) 
+            {
+                for (const auto& face : selected_faces)
+                    blocked_faces.insert(face);
+            }
+            if (GuiButton(Rectangle(x1 + width - xsize - xoffset, current_y, xsize, ysize), "Clear")) 
+            {
+                for (const auto& face : selected_faces)
+                    blocked_faces.erase(face);
+
+                for (const auto& face : selected_faces)
+                    boundary_faces.erase(Boundary(face));
+            }
             current_y += ysize + 50;
 
-            DrawRectangleLinesEx(Rectangle( x1 + xoffset / 2, current_y , x2 - x1 - xoffset, 200 ), 2, BLACK);
-            Button btnAddInflow = { {x1 + 10, y1 + 150, 100, 40}, GRAY, "ADD" };
-            Button btnAddOutflow = { {x1 + 10, y1 + 300, 100, 40}, GRAY, "ADD" };
-
-            InputBox velocityInput = { {x1 + 10, y1 + 80, 120, 30}, "" };
-            InputBox tempInput = { {x1 + 10, y1 + 120, 120, 30}, "" };
-
-            Vector2 mousePos = GetMousePosition();
-
-            btnBlocked.Update(mousePos);
-            btnOpen.Update(mousePos);
-            btnAddInflow.Update(mousePos);
-            btnAddOutflow.Update(mousePos);
-
-            velocityInput.Update(mousePos);
-            tempInput.Update(mousePos);
-
-            btnBlocked.Draw();
-            btnOpen.Draw();
-            btnAddInflow.Draw();
-            btnAddOutflow.Draw();
-
-            DrawText("Inflow", x1 + 10, y1 + 60, 20, BLACK);
-            DrawText("Velocity", x1 + 140, y1 + 85, 20, BLACK);
-            DrawText("Temperature", x1 + 140, y1 + 125, 20, BLACK);
-
-            velocityInput.Draw();
-            tempInput.Draw();
-
-            if (btnBlocked.isPressed)
+            DrawRectangleLinesEx(Rectangle(x1 + xoffset / 2, current_y, x2 - x1 - xoffset, 200), 2, BLACK);
+            DrawText("Inflow", x1 + xoffset, y1 + 10 + current_y, 20, BLACK);
+            DrawText("Velocity", x1 + xoffset + 140, y1 + 60 + current_y, 20, BLACK);
+            DrawText("Temperature", x1 + xoffset + 140, y1 + 100 + current_y, 20, BLACK);
+            if (GuiTextBox(Rectangle(x1 + xoffset, y1 + 55 + current_y, 120, 30), velocity_input, 32, text_box_edit_mode[0]))
             {
-                for (const auto& face : selected_faces)
-                {
-                    blocked_faces.insert(face);
-                }
+                text_box_edit_mode[0] = !text_box_edit_mode[0];
+                if (!IsValidFloat(velocity_input)) strcpy(velocity_input, "");
             }
-            if (btnOpen.isPressed)
+            if (GuiTextBox(Rectangle(x1 + xoffset, y1 + 95 + current_y, 120, 30), temp_input, 32, text_box_edit_mode[1]))
+            {
+                text_box_edit_mode[1] = !text_box_edit_mode[1];
+                if (!IsValidFloat(temp_input)) strcpy(temp_input, "");
+            }
+            if (GuiButton(Rectangle(x1 + xoffset, y1 + 150 + current_y, 150, 40), direction_toggle == false ? "+ve direction" : "-ve direction"))
+            { 
+                direction_toggle = !direction_toggle;
+            }
+            if (GuiButton(Rectangle(x2 - 100 - xoffset, y1 + 150 + current_y, 100, 40), "ADD")) 
             {
                 for (const auto& face : selected_faces)
+                    boundary_faces.erase(Boundary(face));
+
+                for (const auto& face : selected_faces)
                 {
-                    blocked_faces.erase(face);
+                    // Check for invalid boundary selection and skip in this case
+
+                    auto new_boundary = Boundary(face);
+                    char* endptr;
+                    float result = strtof(temp_input, &endptr);
+                    new_boundary.optional_temp = result;
+                    result = strtof(velocity_input, &endptr);
+                    new_boundary.optional_temp = result;
+                    new_boundary.boundary_dir = direction_toggle;
+                    boundary_faces.insert(new_boundary);
                 }
             }
         }
@@ -397,6 +419,16 @@ public:
                 DrawLineEx({ xPos, yPos - ofset }, { xPos, yPos + cellHeight + ofset }, bold_width, BLACK);
             else
                 DrawLineEx({ xPos - ofset, yPos }, { xPos + cellHeight + ofset, yPos }, bold_width, BLACK);
+        }
+
+        for (const auto& face : boundary_faces)
+        {
+            float xPos = face.i * cellWidth + offsetX;
+            float yPos = face.j * cellHeight + offsetY;
+            if (face.dir == 0)
+                DrawLineEx({ xPos, yPos - ofset }, { xPos, yPos + cellHeight + ofset }, bold_width, PURPLE);
+            else
+                DrawLineEx({ xPos - ofset, yPos }, { xPos + cellHeight + ofset, yPos }, bold_width, PURPLE);
         }
 
         for (const auto& face : selected_faces)

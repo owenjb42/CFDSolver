@@ -10,8 +10,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # ======== Raylib ========
 add_subdirectory(dependencies/raylib)
 
+# ======== Raygui ========
+add_library(raygui CFDSolver/raygui.cpp)
+target_include_directories(raygui PUBLIC dependencies/raygui/src)
+target_link_libraries(raygui PUBLIC raylib)
+
 # ======== CFD Solver ========
 add_executable(CFDSolver CFDSolver/main.cpp 
 			   CFDSolver/Interface.cpp 
-			   "CFDSolver/Helper.cpp")
-target_link_libraries(CFDSolver PUBLIC raylib)
+			   CFDSolver/Helper.cpp)
+target_link_libraries(CFDSolver PUBLIC raylib raygui)

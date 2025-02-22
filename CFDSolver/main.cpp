@@ -35,7 +35,7 @@ int main()
 
         // Solve for max n itterations
 
-        auto solve_thread = std::jthread(&SolverStaggeredIMEXTemp::solve, &s, 10000);
+        auto solve_thread = std::jthread(&SolverStaggeredIMEXTemp::solve, &s, 100000);
 
         interface.RenderResults();
         if (s.is_solving)
