@@ -17,9 +17,10 @@ class SolverStaggeredIMEXTemp
 public:
     SolverStaggeredIMEXTemp(Interface& interface) : interface(interface), nx(interface.nx), ny(interface.ny), dx(interface.dx), dy(interface.dy)
     {
-        SetBoundaryBlockedFaces(interface);
+        SetBlockedFaces(interface);
         interface.SetData(*this);
     }
+    bool is_solving{ true };
     Interface& interface;
 
     void ComputeDivergence() 
@@ -686,8 +687,13 @@ public:
     // Main time stepping method
     void solve(int num_iterations) 
     {
+        is_solving = true;
+
         for (int iter = 0; iter < num_iterations; ++iter) 
         {
+            if (!is_solving)
+                break;
+
             v_scr.reset();
             u_scr.reset();
             p_correction.reset();
@@ -743,6 +749,8 @@ public:
             CalculateCellVelocities();
             interface.SetData(*this);
         }
+
+        is_solving = false;
     }
 
     void ApplyVelocityBoundaryConditions() 
@@ -787,7 +795,7 @@ public:
             boundary.ApplyForTemperature(*this);
     }
 
-    void SetBoundaryBlockedFaces(Interface& interface)
+    void SetBlockedFaces(Interface& interface)
     {
         u_face_flags.setFlag(Flag::Open);
         v_face_flags.setFlag(Flag::Open);
@@ -828,7 +836,7 @@ public:
 
     int innerPressureItterations{ 40 };
     int innerVelocityItterations{ 2 };
-    int innerTemperatureItterations{ 2 };
+    int innerTemperatureItterations{ 20 };
     double residualLimit{ 10e-5 };
 
     // Cell Props

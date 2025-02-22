@@ -7,46 +7,43 @@ int main()
 {
     Interface interface;
 
-    // Define grid
+    while (!WindowShouldClose())
+    {
+        // Define grid
 
-    interface.RenderModel();
+        interface.RenderModel();
 
-	SolverStaggeredIMEXTemp s(interface);
+        SolverStaggeredIMEXTemp s(interface);
 
-    // Set Boundaries
+        // Set Boundaries
 
-    auto& b1 = s.inlet_boundary_conditions.emplace_back(0, 0);
-    b1.inlet_temperature = 20;
-    b1.inlet_velocity = 1.0;
-    for (int j = 0; j < s.ny / 4; ++j)
-        b1.boundary_faces.push_back({ 0, j });
+        auto& b1 = s.inlet_boundary_conditions.emplace_back(0, 0);
+        b1.inlet_temperature = 20;
+        b1.inlet_velocity = 1.0;
+        for (int j = 0; j < s.ny / 4; ++j)
+            b1.boundary_faces.push_back({ 0, j });
 
-    auto& b2 = s.inlet_boundary_conditions.emplace_back(0, 1);
-    b2.inlet_temperature = 40;
-    b2.inlet_velocity = 1.0;
-    for (int i = s.ny / 3; i < s.ny / 2; ++i)
-        b2.boundary_faces.push_back({ i, 0 });
+        auto& b2 = s.inlet_boundary_conditions.emplace_back(0, 1);
+        b2.inlet_temperature = 40;
+        b2.inlet_velocity = 1.0;
+        for (int i = s.ny / 3; i < s.ny / 2; ++i)
+            b2.boundary_faces.push_back({ i, 0 });
 
-    auto& b3 = s.outlet_boundary_condition.emplace_back(1, 0);
-    for (int j = 0; j < s.ny / 4; ++j)
-        b3.boundary_faces.push_back({ s.nx, j });
+        auto& b3 = s.outlet_boundary_condition.emplace_back(1, 0);
+        for (int j = 0; j < s.ny / 4; ++j)
+            b3.boundary_faces.push_back({ s.nx, j });
 
-    // Set inner blocked faces
+        // Solve for max n itterations
 
-    //for (int j = 0; j < s.ny / 2; ++j)
-    //{
-    //    s.u_face_flags.clearFlag(s.nx / 2, j, Flag::Open);
-    //}
-    //for (int i = s.nx / 4; i < s.nx / 2; ++i)
-    //{
-    //    s.v_face_flags.clearFlag(i, s.ny / 2, Flag::Open);
-    //}
+        auto solve_thread = std::jthread(&SolverStaggeredIMEXTemp::solve, &s, 10000);
 
-    // Solve for max n itterations
-
-    auto solve_thread = std::jthread(&SolverStaggeredIMEXTemp::solve, &s, 10000);
-
-    interface.RenderResults();
+        interface.RenderResults();
+        if (s.is_solving)
+        {
+            s.is_solving = false;
+            interface.RenderResults();
+        }
+    }
 	
 	return 0;
 }

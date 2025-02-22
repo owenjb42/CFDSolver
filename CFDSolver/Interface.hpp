@@ -6,6 +6,7 @@
 #include <iostream>
 #include <algorithm>
 #include "FairMutex.hpp"
+#include "Helper.hpp"
 
 #include "PhysicalField.hpp"
 
@@ -39,6 +40,7 @@ public:
     }
 
     void SetData(SolverStaggeredIMEXTemp& solver);
+    void GetDataFromBuffer();
 
     void RenderModel()
     {
@@ -46,24 +48,30 @@ public:
         while (!WindowShouldClose() && in_model_creator_mode)
         {
             HandleInput();
+
             BeginDrawing();
             ClearBackground(RAYWHITE);
+
             DrawGrid();
+            DrawPannel();
+
             EndDrawing();
         }
     }
 
     void RenderResults()
     {
+        in_model_creator_mode = false;
+
         double minTemp{ 0.0 };
         double maxTemp{ 0.0 };
 
-        while (!WindowShouldClose())
+        while (!WindowShouldClose() && !in_model_creator_mode)
         {
-            std::lock_guard lk(mutex);
+            GetDataFromBuffer();
 
             // setup only needed if there is new data 
-            if (needs_update)
+            if (recalculate_auxiliary_data)
             {
                 minPressure = *std::ranges::min_element(p.begin(), p.end());
                 maxPressure = *std::ranges::max_element(p.begin(), p.end());
@@ -92,7 +100,7 @@ public:
 
                 //GenerateStreamlines(200, 200, 0.1);
 
-                needs_update = false;
+                recalculate_auxiliary_data = false;
             }
 
             HandleInput();
@@ -102,15 +110,16 @@ public:
 
             DrawField(t, minTemp, maxTemp);
             DrawGrid();
-
             DrawVelocityVectors();
             //DrawStreamlines();
+            DrawPannel();
 
             EndDrawing();
         }
     }
 
-    FairMutex mutex;
+    // UI
+    float sidebar_width = 400.0f;
 
     // Model creator
     bool in_model_creator_mode{ false };
@@ -125,11 +134,14 @@ public:
     // Result infomation
     int nx{ 5 }, ny{ 5 };
     float dx{ 0.005f }, dy{ 0.005f };
+    PhysicalField u_buffer, v_buffer, p_buffer, t_buffer, divergence_buffer, u_face_buffer, v_face_buffer;
     PhysicalField u, v, p, t, divergence, u_face, v_face;
+    FairMutex mutex;
 
     float cellWidth{ 0 }, cellHeight{ 0 };
 
     bool needs_update{ true };
+    bool recalculate_auxiliary_data{ false };
 
     // Render settings
     float offsetX{ 0 }, offsetY{ 0 }; // offset in the screen co-ords
@@ -174,7 +186,10 @@ public:
         if (in_model_creator_mode)
         {
             if (IsKeyPressed(KEY_S))
+            {
                 in_model_creator_mode = false;
+                selected_faces.clear();
+            }
 
             key_hold_time[0] = IsKeyDown(KEY_LEFT) ? key_hold_time[0] + GetFrameTime() : 0.0f;
             key_hold_time[1] = IsKeyDown(KEY_RIGHT) ? key_hold_time[1] + GetFrameTime() : 0.0f;
@@ -190,41 +205,46 @@ public:
             if (IsKeyPressed(KEY_DOWN) || key_hold_time[3] > 0.3f)
                 ny = std::min(200, ny + 1);
 
-            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+            if (IsMouseInView())
             {
-                if (!dragging)
+                if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
                 {
-                    drag_start = mouse_pos;
-                    dragging = true;
-                }
-                else 
-                {
-                    DrawRectangle(mouse_pos.x, mouse_pos.y, drag_start.x - mouse_pos.x, drag_start.y - mouse_pos.y, SKYBLUE);
-                    DrawRectangleLines(mouse_pos.x, mouse_pos.y, drag_start.x - mouse_pos.x, drag_start.y - mouse_pos.y, BLUE);
-
-                    auto grid_pos_1 = ScreenToGridPos(drag_start);
-                    auto grid_pos_2 = ScreenToGridPos(mouse_pos);
-
-                    int i1 = std::ceil(std::min(grid_pos_1.x, grid_pos_2.x) / dx);
-                    int i2 = std::floor(std::max(grid_pos_1.x, grid_pos_2.x) / dx);
-                    int j1 = std::ceil(std::min(grid_pos_1.y, grid_pos_2.y) / dy);
-                    int j2 = std::floor(std::max(grid_pos_1.y, grid_pos_2.y) / dy);
-
-                    selected_faces.clear();
-                    if (i1 < i2 || j1 < j2)
+                    if (!dragging)
                     {
-                        for (int i = std::max(i1, 0); i <= std::min(i2, nx); ++i)
-                            for (int j = std::max(j1, 0); j < std::min(j2, ny); ++j)
-                                selected_faces.push_back({ 0, i, j });
-                        for (int i = std::max(i1, 0); i < std::min(i2, nx); ++i)
-                            for (int j = std::max(j1, 0); j <= std::min(j2, ny); ++j)
-                                selected_faces.push_back({ 1, i, j });
+                        drag_start = mouse_pos;
+                        dragging = true;
+                    }
+                    else
+                    {
+                        auto drag_end = Vector2(std::clamp(mouse_pos.x, 0.0f, GetViewScreenWidth()), std::clamp(mouse_pos.y, 0.0f, (float)GetScreenHeight()));
+
+                        DrawRectangleSafe(drag_end.x, drag_end.y, drag_start.x - drag_end.x, drag_start.y - drag_end.y, SKYBLUE);
+                        DrawRectangleLines(drag_end.x, drag_end.y, drag_start.x - drag_end.x, drag_start.y - drag_end.y, BLUE);
+
+                        auto grid_pos_1 = ScreenToGridPos(drag_start);
+                        auto grid_pos_2 = ScreenToGridPos(drag_end);
+
+                        int i1 = std::ceil(std::min(grid_pos_1.x, grid_pos_2.x) / dx);
+                        int i2 = std::floor(std::max(grid_pos_1.x, grid_pos_2.x) / dx);
+                        int j1 = std::ceil(std::min(grid_pos_1.y, grid_pos_2.y) / dy);
+                        int j2 = std::floor(std::max(grid_pos_1.y, grid_pos_2.y) / dy);
+
+                        selected_faces.clear();
+                        if (i1 < i2 || j1 < j2)
+                        {
+                            for (int i = std::max(i1, 0); i <= std::min(i2, nx); ++i)
+                                for (int j = std::max(j1, 0); j < std::min(j2, ny); ++j)
+                                    selected_faces.push_back({ 0, i, j });
+                            for (int i = std::max(i1, 0); i < std::min(i2, nx); ++i)
+                                for (int j = std::max(j1, 0); j <= std::min(j2, ny); ++j)
+                                    selected_faces.push_back({ 1, i, j });
+                        }
                     }
                 }
-            }
-            else
-            {
-                dragging = false;
+                else
+                {
+                    dragging = false;
+                }
             }
 
             // toggle blocked face
@@ -239,6 +259,9 @@ public:
         }
         else
         {
+            if (IsKeyPressed(KEY_S))
+                in_model_creator_mode = true;
+
             // Scale Velocity
             if (IsKeyDown(KEY_A))
                 velocityScale *= 1.0f + zoom_sensitivity;
@@ -257,16 +280,94 @@ public:
         return Vector2{ grid_pos.x * zoom + offsetX, grid_pos.y * zoom + offsetY };
     }
 
+    float GetViewScreenWidth()
+    {
+        return GetScreenWidth() - sidebar_width;
+    }
+
+    bool IsMouseInView()
+    {
+        auto pos = GetMousePosition();
+        return pos.x > 0.0f && pos.x < GetViewScreenWidth() && pos.y > 0.0f && pos.y < GetScreenHeight();
+    }
+
     void ResetView()
     {
         offsetX = offsetY = 0.0f;
-        double max_scale = std::max(nx * dx / GetScreenWidth(), ny * dy / GetScreenHeight());
+        double max_scale = std::max(nx * dx / GetViewScreenWidth(), ny * dy / GetScreenHeight());
         zoom = 1 / max_scale;
+    }
+
+    void DrawPannel()
+    {
+        int x1 = GetViewScreenWidth(), x2 = GetScreenWidth(), y1 = 0.0f, y2 = GetScreenHeight();
+        int width = x2 - x1;
+        Rectangle panel = { x1, y1, x2 - x1, y2 - y1 };
+        DrawRectangleRec(panel, LIGHTGRAY);
+        DrawRectangleLinesEx(panel, 2, DARKGRAY);
+
+        float current_y = y1 + 50;
+
+        if (in_model_creator_mode)
+        {
+            int xoffset = 30, xsize = 150, ysize = 60;
+            Button btnBlocked = { {x1 + xoffset, current_y, xsize, ysize}, GRAY, "Blocked" };
+            Button btnOpen = { {x1 + width - xsize - xoffset, current_y, xsize, ysize}, GRAY, " Open" };
+            current_y += ysize + 50;
+
+            DrawRectangleLinesEx(Rectangle( x1 + xoffset / 2, current_y , x2 - x1 - xoffset, 200 ), 2, BLACK);
+            Button btnAddInflow = { {x1 + 10, y1 + 150, 100, 40}, GRAY, "ADD" };
+            Button btnAddOutflow = { {x1 + 10, y1 + 300, 100, 40}, GRAY, "ADD" };
+
+            InputBox velocityInput = { {x1 + 10, y1 + 80, 120, 30}, "" };
+            InputBox tempInput = { {x1 + 10, y1 + 120, 120, 30}, "" };
+
+            Vector2 mousePos = GetMousePosition();
+
+            btnBlocked.Update(mousePos);
+            btnOpen.Update(mousePos);
+            btnAddInflow.Update(mousePos);
+            btnAddOutflow.Update(mousePos);
+
+            velocityInput.Update(mousePos);
+            tempInput.Update(mousePos);
+
+            btnBlocked.Draw();
+            btnOpen.Draw();
+            btnAddInflow.Draw();
+            btnAddOutflow.Draw();
+
+            DrawText("Inflow", x1 + 10, y1 + 60, 20, BLACK);
+            DrawText("Velocity", x1 + 140, y1 + 85, 20, BLACK);
+            DrawText("Temperature", x1 + 140, y1 + 125, 20, BLACK);
+
+            velocityInput.Draw();
+            tempInput.Draw();
+
+            if (btnBlocked.isPressed)
+            {
+                for (const auto& face : selected_faces)
+                {
+                    blocked_faces.insert(face);
+                }
+            }
+            if (btnOpen.isPressed)
+            {
+                for (const auto& face : selected_faces)
+                {
+                    blocked_faces.erase(face);
+                }
+            }
+        }
+        else
+        {
+
+        }
     }
 
     void DrawGrid()
     {
-        // Draw grid lines
+        // Draw Grid Lines
         for (int i = 0; i <= nx; ++i)
         {
             float xPos = i * cellWidth + offsetX;
@@ -279,8 +380,14 @@ public:
             DrawLineV({ offsetX, yPos }, { offsetX + nx * cellWidth, yPos }, GRAY);
         }
 
-        float bold_width = zoom / 4000.0f;
+        // Draw Boundary & Blocked Faces
+        float bold_width = std::max(zoom / 4000.0f, 1.5f);
         float ofset = 0.5f * bold_width;
+
+        DrawLineEx({ offsetX, offsetY - ofset },                   { offsetX, offsetY + ny * cellHeight + ofset }, bold_width, BLACK);
+        DrawLineEx({ offsetX + nx * cellWidth, offsetY - ofset },  { offsetX + nx * cellWidth, offsetY + ny * cellHeight + ofset }, bold_width, BLACK);
+        DrawLineEx({ offsetX - ofset, offsetY },                   { offsetX + nx * cellWidth + ofset, offsetY }, bold_width, BLACK);
+        DrawLineEx({ offsetX - ofset, offsetY + ny * cellHeight }, { offsetX + nx * cellWidth + ofset, offsetY + ny * cellHeight }, bold_width, BLACK);
 
         for (const auto& face : blocked_faces)
         {
@@ -303,22 +410,20 @@ public:
         }
     }
 
-    Color MapToColor(float value, float minValue, float maxValue)
-    {
-        if (std::isnan(value) || value < minValue || value > maxValue || minValue == maxValue)
-            return WHITE;
-
-        float normalized = (value - minValue) / (maxValue - minValue);
-
-        float r = std::clamp(1.5 - std::abs(4.0 * normalized - 3.0), 0.0, 1.0);
-        float g = std::clamp(1.5 - std::abs(4.0 * normalized - 2.0), 0.0, 1.0);
-        float b = std::clamp(1.5 - std::abs(4.0 * normalized - 1.0), 0.0, 1.0);
-
-        return Color{ (unsigned char)(255 * r), (unsigned char)(255 * g), (unsigned char)(255 * b), 255 };
-    }
-
     void DrawVelocityVectors()
     {
+        auto DrawArrowHead = [](Vector2 centre, Vector2 direction, float scale, Color color)
+        {
+            float angle = atan2(direction.y, direction.x);
+            float arrowHeadAngle = 0.8f;
+
+            Vector2 arrowPoint1 = Vector2{ centre.x + direction.x * scale, centre.y + direction.y * scale };
+            Vector2 arrowPoint2 = Vector2{ centre.x - scale * cos(angle + arrowHeadAngle), centre.y - scale * sin(angle + arrowHeadAngle) };
+            Vector2 arrowPoint3 = Vector2{ centre.x - scale * cos(angle - arrowHeadAngle), centre.y - scale * sin(angle - arrowHeadAngle) };
+            DrawTriangle(arrowPoint1, arrowPoint2, arrowPoint3, color);
+            DrawTriangleLines(arrowPoint1, arrowPoint2, arrowPoint3, BLACK);
+        };
+
         float scale = velocityScale * zoom;
 
         for (int j = 0; j < ny; ++j)
@@ -340,18 +445,6 @@ public:
                 DrawArrowHead(Vector2{ (float)xPos, (float)yPos }, Vector2{ (float)uVal, (float)vVal }, logMagnitude * scale, MapToColor(magnitude, minVelocity, maxVelocity));
             }
         }
-    }
-
-    void DrawArrowHead(Vector2 centre, Vector2 direction, float scale, Color color)
-    {
-        float angle = atan2(direction.y, direction.x);
-        float arrowHeadAngle = 0.8f;
-
-        Vector2 arrowPoint1 = Vector2{ centre.x + direction.x * scale, centre.y + direction.y * scale };
-        Vector2 arrowPoint2 = Vector2{ centre.x - scale * cos(angle + arrowHeadAngle), centre.y - scale * sin(angle + arrowHeadAngle) };
-        Vector2 arrowPoint3 = Vector2{ centre.x - scale * cos(angle - arrowHeadAngle), centre.y - scale * sin(angle - arrowHeadAngle) };
-        DrawTriangle(arrowPoint1, arrowPoint2, arrowPoint3, color);
-        DrawTriangleLines(arrowPoint1, arrowPoint2, arrowPoint3, BLACK);
     }
 
     void DrawField(const PhysicalField& f, float minValue, float maxValue)
@@ -493,5 +586,19 @@ public:
                 //}
             }
         }
+    }
+
+    Color MapToColor(float value, float minValue, float maxValue)
+    {
+        if (std::isnan(value) || value < minValue || value > maxValue || minValue == maxValue)
+            return WHITE;
+
+        float normalized = (value - minValue) / (maxValue - minValue);
+
+        float r = std::clamp(1.5 - std::abs(4.0 * normalized - 3.0), 0.0, 1.0);
+        float g = std::clamp(1.5 - std::abs(4.0 * normalized - 2.0), 0.0, 1.0);
+        float b = std::clamp(1.5 - std::abs(4.0 * normalized - 1.0), 0.0, 1.0);
+
+        return Color{ (unsigned char)(255 * r), (unsigned char)(255 * g), (unsigned char)(255 * b), 255 };
     }
 };

@@ -12,5 +12,6 @@ add_subdirectory(dependencies/raylib)
 
 # ======== CFD Solver ========
 add_executable(CFDSolver CFDSolver/main.cpp 
-			   CFDSolver/Interface.cpp)
+			   CFDSolver/Interface.cpp 
+			   "CFDSolver/Helper.cpp")
 target_link_libraries(CFDSolver PUBLIC raylib)
