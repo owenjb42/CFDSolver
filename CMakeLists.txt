@@ -11,5 +11,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_subdirectory(dependencies/raylib)
 
 # ======== CFD Solver ========
-add_executable(CFDSolver CFDSolver/main.cpp)
+add_executable(CFDSolver CFDSolver/main.cpp 
+			   CFDSolver/Interface.cpp)
 target_link_libraries(CFDSolver PUBLIC raylib)

@@ -2,64 +2,98 @@
 
 #include "raylib.h"
 #include <vector>
+#include <unordered_set>
 #include <iostream>
 #include <algorithm>
 #include "FairMutex.hpp"
 
 #include "PhysicalField.hpp"
 
-class CFDVisualizer {
+struct Face
+{
+    bool operator==(const Face& other) const = default;
+    bool dir; int i; int j;
+};
+namespace std
+{
+    template <> struct hash<Face> { size_t operator()(const Face& f) const { return (hash<bool>()(f.dir) ^ (hash<int>()(f.i) << 1) ^ (hash<int>()(f.j) << 2)); } };
+}
+
+class SolverStaggeredIMEXTemp;
+
+class Interface 
+{
 public:
-    CFDVisualizer(int nx, int ny, float dx, float dy, const PhysicalField& u, const PhysicalField& v, const PhysicalField& u_face, const PhysicalField& v_face, const PhysicalField& p, const PhysicalField& t, const PhysicalField& divergence, FairMutex& cell_data_mutex)
-        : nx(nx), ny(ny), dx(dx), dy(dy), u(u), v(v), u_face(u_face), v_face(v_face), p(p), t(t), divergence(divergence), mutex(cell_data_mutex)
+    Interface()
     {
         SetTraceLogLevel(LOG_ERROR);
         SetConfigFlags(FLAG_WINDOW_RESIZABLE);
         InitWindow(1000, 1000, "CFD Simulation Visualization");
         SetTargetFPS(60);
+        ResetView();
     }
 
-    ~CFDVisualizer() 
+    ~Interface()
     {
         CloseWindow();
     }
 
-    void Render() 
+    void SetData(SolverStaggeredIMEXTemp& solver);
+
+    void RenderModel()
     {
-        minPressure = (float)*std::ranges::min_element(p.begin(), p.end());
-        maxPressure = (float)*std::ranges::max_element(p.begin(), p.end());
-
-        double minTemp = (float)*std::ranges::min_element(t.begin(), t.end());
-        double maxTemp = (float)*std::ranges::max_element(t.begin(), t.end());
-        
-        double minDivergence = (float)*std::ranges::min_element(divergence.begin(), divergence.end());
-        double maxDivergence = (float)*std::ranges::max_element(divergence.begin(), divergence.end());
-
-        double minMaxDivergence = std::max(std::abs(minDivergence), std::abs(maxDivergence));
-
-        for (int j = 0; j < ny; ++j)
+        in_model_creator_mode = true;
+        while (!WindowShouldClose() && in_model_creator_mode)
         {
-            for (int i = 0; i < nx; ++i)
-            {
-                float uVal = static_cast<float>(u(i, j));
-                float vVal = static_cast<float>(v(i, j));
-
-                // Calculate the magnitude and apply logarithmic scaling
-                float magnitude = sqrt(uVal * uVal + vVal * vVal);
-                if (magnitude > maxVelocity) maxVelocity = magnitude;
-                if (magnitude < minVelocity) minVelocity = magnitude;
-            }
+            HandleInput();
+            BeginDrawing();
+            ClearBackground(RAYWHITE);
+            DrawGrid();
+            EndDrawing();
         }
+    }
 
-        double max_scale = std::max(nx * dx / 1000, ny * dy / 1000);
-        zoom = 1 / max_scale;
-        velocityScale = 1000.0f * max_scale;
+    void RenderResults()
+    {
+        double minTemp{ 0.0 };
+        double maxTemp{ 0.0 };
 
-        GenerateStreamlines(300, 300, 0.1);
-
-        while (true)
+        while (!WindowShouldClose())
         {
             std::lock_guard lk(mutex);
+
+            // setup only needed if there is new data 
+            if (needs_update)
+            {
+                minPressure = *std::ranges::min_element(p.begin(), p.end());
+                maxPressure = *std::ranges::max_element(p.begin(), p.end());
+
+                minTemp = *std::ranges::min_element(t.begin(), t.end());
+                maxTemp = *std::ranges::max_element(t.begin(), t.end());
+
+                double minDivergence = *std::ranges::min_element(divergence.begin(), divergence.end());
+                double maxDivergence = *std::ranges::max_element(divergence.begin(), divergence.end());
+
+                double minMaxDivergence = std::max(std::abs(minDivergence), std::abs(maxDivergence));
+
+                for (int j = 0; j < ny; ++j)
+                {
+                    for (int i = 0; i < nx; ++i)
+                    {
+                        float uVal = static_cast<float>(u(i, j));
+                        float vVal = static_cast<float>(v(i, j));
+
+                        // Calculate the magnitude and apply logarithmic scaling
+                        float magnitude = sqrt(uVal * uVal + vVal * vVal);
+                        if (magnitude > maxVelocity) maxVelocity = magnitude;
+                        if (magnitude < minVelocity) minVelocity = magnitude;
+                    }
+                }
+
+                //GenerateStreamlines(200, 200, 0.1);
+
+                needs_update = false;
+            }
 
             HandleInput();
 
@@ -67,49 +101,52 @@ public:
             ClearBackground(RAYWHITE);
 
             DrawField(t, minTemp, maxTemp);
-            //DrawField(p, minPressure, maxPressure);
-            //DrawField(divergence, -minMaxDivergence, minMaxDivergence);
             DrawGrid();
 
             DrawVelocityVectors();
-            DrawStreamlines();
+            //DrawStreamlines();
 
             EndDrawing();
         }
     }
 
-private:
-    FairMutex& mutex;
+    FairMutex mutex;
+
+    // Model creator
+    bool in_model_creator_mode{ false };
+    float key_hold_time[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+    Vector2 drag_start{};
+    bool dragging{ false };
+
+    std::vector<Face> selected_faces;
+    std::unordered_set<Face> blocked_faces;
 
     // Result infomation
-    int nx, ny;
-    float dx, dy;
-    const PhysicalField& u, &v, &p, &t, &divergence, &u_face, &v_face;
-    
+    int nx{ 5 }, ny{ 5 };
+    float dx{ 0.005f }, dy{ 0.005f };
+    PhysicalField u, v, p, t, divergence, u_face, v_face;
+
     float cellWidth{ 0 }, cellHeight{ 0 };
+
+    bool needs_update{ true };
 
     // Render settings
     float offsetX{ 0 }, offsetY{ 0 }; // offset in the screen co-ords
     float zoom{ 1.0f };
     float zoom_sensitivity{ 0.1f };
     float minZoomLevel{ 0.01f };
-    float velocityScale{ 300.0f };
+    float velocityScale{ 0.01f };
 
     float minPressure{ 0.0 }, maxPressure{ 0.0 };
     float minVelocity{ std::numeric_limits<float>::max() }, maxVelocity{ std::numeric_limits<float>::lowest() };
 
-    void HandleInput() 
+    void HandleInput()
     {
         auto mouse_pos = GetMousePosition();
 
         // Zoom in/out using mouse wheel
         auto new_zoom = zoom * (1.0f + GetMouseWheelMove() * zoom_sensitivity);
-
-        // Scale Velocity
-        if (IsKeyDown(KEY_A))
-            velocityScale *= 1.0f + zoom_sensitivity;
-        else if (IsKeyDown(KEY_S))
-            velocityScale *= 1.0f - zoom_sensitivity;
 
         // Keep the mouse position pointing at the same position
         auto old_mouse_grid = ScreenToGridPos(mouse_pos);
@@ -124,17 +161,95 @@ private:
         cellHeight = zoom * dy;
 
         // Pan using right mouse button drag
-        if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) 
+        if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
         {
             Vector2 mouseDelta = GetMouseDelta();
             offsetX += mouseDelta.x;
             offsetY += mouseDelta.y;
         }
+
+        if (IsKeyPressed(KEY_R))
+            ResetView();
+
+        if (in_model_creator_mode)
+        {
+            if (IsKeyPressed(KEY_S))
+                in_model_creator_mode = false;
+
+            key_hold_time[0] = IsKeyDown(KEY_LEFT) ? key_hold_time[0] + GetFrameTime() : 0.0f;
+            key_hold_time[1] = IsKeyDown(KEY_RIGHT) ? key_hold_time[1] + GetFrameTime() : 0.0f;
+            key_hold_time[2] = IsKeyDown(KEY_UP) ? key_hold_time[2] + GetFrameTime() : 0.0f;
+            key_hold_time[3] = IsKeyDown(KEY_DOWN) ? key_hold_time[3] + GetFrameTime() : 0.0f;
+
+            if (IsKeyPressed(KEY_LEFT) || key_hold_time[0] > 0.3f)
+                nx = std::max(3, nx - 1);
+            if (IsKeyPressed(KEY_RIGHT) || key_hold_time[1] > 0.3f)
+                nx = std::min(200, nx + 1);
+            if (IsKeyPressed(KEY_UP) || key_hold_time[2] > 0.3f)
+                ny = std::max(3, ny - 1);
+            if (IsKeyPressed(KEY_DOWN) || key_hold_time[3] > 0.3f)
+                ny = std::min(200, ny + 1);
+
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+            {
+                if (!dragging)
+                {
+                    drag_start = mouse_pos;
+                    dragging = true;
+                }
+                else 
+                {
+                    DrawRectangle(mouse_pos.x, mouse_pos.y, drag_start.x - mouse_pos.x, drag_start.y - mouse_pos.y, SKYBLUE);
+                    DrawRectangleLines(mouse_pos.x, mouse_pos.y, drag_start.x - mouse_pos.x, drag_start.y - mouse_pos.y, BLUE);
+
+                    auto grid_pos_1 = ScreenToGridPos(drag_start);
+                    auto grid_pos_2 = ScreenToGridPos(mouse_pos);
+
+                    int i1 = std::ceil(std::min(grid_pos_1.x, grid_pos_2.x) / dx);
+                    int i2 = std::floor(std::max(grid_pos_1.x, grid_pos_2.x) / dx);
+                    int j1 = std::ceil(std::min(grid_pos_1.y, grid_pos_2.y) / dy);
+                    int j2 = std::floor(std::max(grid_pos_1.y, grid_pos_2.y) / dy);
+
+                    selected_faces.clear();
+                    if (i1 < i2 || j1 < j2)
+                    {
+                        for (int i = std::max(i1, 0); i <= std::min(i2, nx); ++i)
+                            for (int j = std::max(j1, 0); j < std::min(j2, ny); ++j)
+                                selected_faces.push_back({ 0, i, j });
+                        for (int i = std::max(i1, 0); i < std::min(i2, nx); ++i)
+                            for (int j = std::max(j1, 0); j <= std::min(j2, ny); ++j)
+                                selected_faces.push_back({ 1, i, j });
+                    }
+                }
+            }
+            else
+            {
+                dragging = false;
+            }
+
+            // toggle blocked face
+            if (IsKeyPressed(KEY_B))
+            {
+                for (const auto& face : selected_faces) 
+                {
+                    if (IsKeyDown(KEY_LEFT_SHIFT)) blocked_faces.erase(face);
+                    else blocked_faces.insert(face);
+                }
+            }
+        }
+        else
+        {
+            // Scale Velocity
+            if (IsKeyDown(KEY_A))
+                velocityScale *= 1.0f + zoom_sensitivity;
+            if (IsKeyDown(KEY_S))
+                velocityScale *= 1.0f / (1.0f + zoom_sensitivity);
+        }
     }
 
     Vector2 ScreenToGridPos(Vector2 mouse_pos)
     {
-        return Vector2{ (mouse_pos.x + offsetX) / zoom, (mouse_pos.y + offsetY) / zoom };
+        return Vector2{ (mouse_pos.x - offsetX) / zoom, (mouse_pos.y - offsetY) / zoom };
     }
 
     Vector2 GridToScreenPos(Vector2 grid_pos)
@@ -142,19 +257,49 @@ private:
         return Vector2{ grid_pos.x * zoom + offsetX, grid_pos.y * zoom + offsetY };
     }
 
-    void DrawGrid() 
+    void ResetView()
+    {
+        offsetX = offsetY = 0.0f;
+        double max_scale = std::max(nx * dx / GetScreenWidth(), ny * dy / GetScreenHeight());
+        zoom = 1 / max_scale;
+    }
+
+    void DrawGrid()
     {
         // Draw grid lines
-        for (int i = 0; i <= nx; ++i) 
+        for (int i = 0; i <= nx; ++i)
         {
             float xPos = i * cellWidth + offsetX;
             DrawLineV({ xPos, offsetY }, { xPos, offsetY + ny * cellHeight }, GRAY);
         }
 
-        for (int j = 0; j <= ny; ++j) 
+        for (int j = 0; j <= ny; ++j)
         {
             float yPos = j * cellHeight + offsetY;
             DrawLineV({ offsetX, yPos }, { offsetX + nx * cellWidth, yPos }, GRAY);
+        }
+
+        float bold_width = zoom / 4000.0f;
+        float ofset = 0.5f * bold_width;
+
+        for (const auto& face : blocked_faces)
+        {
+            float xPos = face.i * cellWidth + offsetX;
+            float yPos = face.j * cellHeight + offsetY;
+            if (face.dir == 0)
+                DrawLineEx({ xPos, yPos - ofset }, { xPos, yPos + cellHeight + ofset }, bold_width, BLACK);
+            else
+                DrawLineEx({ xPos - ofset, yPos }, { xPos + cellHeight + ofset, yPos }, bold_width, BLACK);
+        }
+
+        for (const auto& face : selected_faces)
+        {
+            float xPos = face.i * cellWidth + offsetX;
+            float yPos = face.j * cellHeight + offsetY;
+            if (face.dir == 0)
+                DrawLineEx({ xPos, yPos - ofset }, { xPos, yPos + cellHeight + ofset }, bold_width, RED);
+            else
+                DrawLineEx({ xPos - ofset, yPos }, { xPos + cellHeight + ofset, yPos }, bold_width, RED);
         }
     }
 
@@ -172,17 +317,13 @@ private:
         return Color{ (unsigned char)(255 * r), (unsigned char)(255 * g), (unsigned char)(255 * b), 255 };
     }
 
-    /// <summary>
-    /// Velocity vector code
-    /// </summary>
-
-    void DrawVelocityVectors() 
+    void DrawVelocityVectors()
     {
         float scale = velocityScale * zoom;
 
-        for (int j = 0; j < ny; ++j) 
+        for (int j = 0; j < ny; ++j)
         {
-            for (int i = 0; i < nx; ++i) 
+            for (int i = 0; i < nx; ++i)
             {
                 float uVal = static_cast<float>(u(i, j));
                 float vVal = static_cast<float>(v(i, j));
@@ -195,7 +336,7 @@ private:
                 // Calculate the starting position of the vector (center of the cell)
                 float xPos = i * cellWidth + cellWidth / 2 + offsetX;
                 float yPos = j * cellHeight + cellHeight / 2 + offsetY;
-                
+
                 DrawArrowHead(Vector2{ (float)xPos, (float)yPos }, Vector2{ (float)uVal, (float)vVal }, logMagnitude * scale, MapToColor(magnitude, minVelocity, maxVelocity));
             }
         }
@@ -213,15 +354,11 @@ private:
         DrawTriangleLines(arrowPoint1, arrowPoint2, arrowPoint3, BLACK);
     }
 
-    /// <summary>
-    /// Result plot code
-    /// </summary>
-
     void DrawField(const PhysicalField& f, float minValue, float maxValue)
     {
-        for (int j = 0; j < ny; ++j) 
+        for (int j = 0; j < ny; ++j)
         {
-            for (int i = 0; i < nx; ++i) 
+            for (int i = 0; i < nx; ++i)
             {
                 float value = f(i, j);
 
@@ -236,21 +373,16 @@ private:
         }
     }
 
-    /// <summary>
-    /// Streamline Code
-    /// </summary>
-
     struct Streamline
     {
         bool is_reverse{ false };
         std::vector<Vector2> points;
     };
-
     std::vector<Streamline> streamlines;
 
     void GenerateStreamlines(int numSeeds, int steps, float stepSize)
     {
-        auto sampleVelocity = [&](float x, float y) -> Vector2 
+        auto sampleVelocity = [&](float x, float y) -> Vector2
         {
             if (x <= 0.5f || y <= 0.5f || x >= nx - 0.5f || y >= ny - 0.5f)
                 return { 0.0f, 0.0f }; // Out of bounds
@@ -278,7 +410,9 @@ private:
             return { vx, vy };
         };
 
-        for (int seed = 0; seed < numSeeds; ++seed) 
+        streamlines.clear();
+
+        for (int seed = 0; seed < numSeeds; ++seed)
         {
             // Generate random seed points within the field
             float x = GetRandomValue(0, nx);
@@ -289,7 +423,7 @@ private:
 
             Streamline streamline;
 
-            for (int step = 0; step < steps; ++step) 
+            for (int step = 0; step < steps; ++step)
             {
                 Vector2 velocity = sampleVelocity(x, y);
 
@@ -305,7 +439,7 @@ private:
                 float nextY = y + sign * velocity.y;
 
                 // Store point in streamline
-                streamline.points.push_back(Vector2{ x*dx, y*dy });
+                streamline.points.push_back(Vector2{ x * dx, y * dy });
 
                 x = nextX;
                 y = nextY;

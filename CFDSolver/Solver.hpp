@@ -140,14 +140,14 @@ public:
             PressureCorrection();
 
             // Check Residuals
-            double maxResidual{ 0.0 };
-            for (int i = 0; i < u.values.size(); ++i)
-            {
-                double residual = (u.values[i] - u_old.values[i]) / (u.values[i] + 1e-20);
-                maxResidual = std::max(maxResidual, residual);
-            }
-            printf("\rIteration: %d | X Velocity Residual: %f", iter, maxResidual);
-            if (maxResidual < residualLimit && iter != 0) break;
+            //double maxResidual{ 0.0 };
+            //for (int i = 0; i < u.values.size(); ++i)
+            //{
+            //    double residual = (u.values[i] - u_old.values[i]) / (u.values[i] + 1e-20);
+            //    maxResidual = std::max(maxResidual, residual);
+            //}
+            //printf("\rIteration: %d | X Velocity Residual: %f", iter, maxResidual);
+            //if (maxResidual < residualLimit && iter != 0) break;
         }
 
         //generateVectorFieldWithGrid(u, v);

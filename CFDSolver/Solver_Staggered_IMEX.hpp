@@ -420,20 +420,20 @@ public:
             ApplyPressureCorrectionToVelocity();
 
             // Check Residuals
-            if (iter % 5 == 0)
-            {
-                double maxResidual{ 0.0 };
-                for (int i = 0; i < p.values.size(); ++i)
-                {
-                    double residual = std::abs((relaxation * p_correction.values[i]) / (p.values[i] + 1e-20));
-                    maxResidual = std::max(maxResidual, residual);
-                }
-                double maxDivergence = std::max(std::abs(*std::ranges::min_element(divergence.values)), std::abs(*std::ranges::max_element(divergence.values)));
-
-                printf("\rIteration: %d | Pressure Residual: %.3e | Max Abs Divergence %.3e   ", iter, maxResidual, maxDivergence);
-                if ((maxResidual < residualLimit) && (maxDivergence < divergenceLimit) && (iter > 2))
-                    break;
-            }
+            //if (iter % 5 == 0)
+            //{
+            //    double maxResidual{ 0.0 };
+            //    for (int i = 0; i < p.values.size(); ++i)
+            //    {
+            //        double residual = std::abs((relaxation * p_correction.values[i]) / (p.values[i] + 1e-20));
+            //        maxResidual = std::max(maxResidual, residual);
+            //    }
+            //    double maxDivergence = std::max(std::abs(*std::ranges::min_element(divergence.values)), std::abs(*std::ranges::max_element(divergence.values)));
+            //
+            //    printf("\rIteration: %d | Pressure Residual: %.3e | Max Abs Divergence %.3e   ", iter, maxResidual, maxDivergence);
+            //    if ((maxResidual < residualLimit) && (maxDivergence < divergenceLimit) && (iter > 2))
+            //        break;
+            //}
         }
 
         CalculateCellVelocities();
