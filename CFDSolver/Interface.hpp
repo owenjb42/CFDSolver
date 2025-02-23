@@ -14,19 +14,20 @@
 struct Face
 {
     bool operator==(const Face& other) const = default;
-    bool dir; int i; int j;
+    bool component_dir /*0: u, 1: v*/; int i; int j;
 };
 struct Boundary : public Face
 {
     bool operator==(const Boundary& other) const { return Face::operator==(other); }
-    enum type{Fixed, Open};
+    enum Type{FixedInflow = 1, FixedOutflow = 2, Open = 3};
+    Type type{ Open };
     double optional_velocity{ 0.0 }, optional_temp{ 0.0 };
     bool boundary_dir{ 0 };// 0: +, 1: -
 };
 namespace std
 {
-    template <> struct hash<Face> { size_t operator()(const Face& f) const { return (hash<bool>()(f.dir) ^ (hash<int>()(f.i) << 1) ^ (hash<int>()(f.j) << 2)); } };
-    template <> struct hash<Boundary> { size_t operator()(const Boundary& f) const { return (hash<bool>()(f.dir) ^ (hash<int>()(f.i) << 1) ^ (hash<int>()(f.j) << 2)); } };
+    template <> struct hash<Face> { size_t operator()(const Face& f) const { return (hash<bool>()(f.component_dir) ^ (hash<int>()(f.i) << 1) ^ (hash<int>()(f.j) << 2)); } };
+    template <> struct hash<Boundary> { size_t operator()(const Boundary& f) const { return (hash<bool>()(f.component_dir) ^ (hash<int>()(f.i) << 1) ^ (hash<int>()(f.j) << 2)); } };
 }
 
 class SolverStaggeredIMEXTemp;
@@ -70,12 +71,12 @@ public:
 
     void RenderResults()
     {
-        in_model_creator_mode = false;
+        in_render_mode = true;
 
         double minTemp{ 0.0 };
         double maxTemp{ 0.0 };
 
-        while (!WindowShouldClose() && !in_model_creator_mode)
+        while (!WindowShouldClose() && in_render_mode)
         {
             GetDataFromBuffer();
 
@@ -84,6 +85,9 @@ public:
             {
                 minPressure = *std::ranges::min_element(p.begin(), p.end());
                 maxPressure = *std::ranges::max_element(p.begin(), p.end());
+
+                maxVelocity = 0.0;
+                minVelocity = 0.0;
 
                 minTemp = *std::ranges::min_element(t.begin(), t.end());
                 maxTemp = *std::ranges::max_element(t.begin(), t.end());
@@ -130,14 +134,17 @@ public:
     // UI
     float sidebar_width = 400.0f;
 
-    // Model creator
     bool in_model_creator_mode{ false };
-    float key_hold_time[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    bool text_box_edit_mode[2] = { false, false };
+    bool in_render_mode{ false };
 
-    char velocity_input[32] = "1.0";
-    char temp_input[32] = "20.0";
-    bool direction_toggle = false;
+    // Model creator
+    float key_hold_time[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    bool text_box_edit_mode[3] = { false, false, false };
+
+    char velocity_input[32] = "1";
+    char velocity_input2[32] = "1";
+    char temp_input[32] = "20";
+    bool direction_toggle[2] = { false, false };
 
     Vector2 drag_start{};
     bool dragging{ false };
@@ -206,61 +213,71 @@ public:
                 selected_faces.clear();
             }
 
+            bool grid_shrank = false;
+
             key_hold_time[0] = IsKeyDown(KEY_LEFT) ? key_hold_time[0] + GetFrameTime() : 0.0f;
             key_hold_time[1] = IsKeyDown(KEY_RIGHT) ? key_hold_time[1] + GetFrameTime() : 0.0f;
             key_hold_time[2] = IsKeyDown(KEY_UP) ? key_hold_time[2] + GetFrameTime() : 0.0f;
             key_hold_time[3] = IsKeyDown(KEY_DOWN) ? key_hold_time[3] + GetFrameTime() : 0.0f;
 
             if (IsKeyPressed(KEY_LEFT) || key_hold_time[0] > 0.3f)
-                nx = std::max(3, nx - 1);
-            if (IsKeyPressed(KEY_RIGHT) || key_hold_time[1] > 0.3f)
-                nx = std::min(200, nx + 1);
-            if (IsKeyPressed(KEY_UP) || key_hold_time[2] > 0.3f)
-                ny = std::max(3, ny - 1);
-            if (IsKeyPressed(KEY_DOWN) || key_hold_time[3] > 0.3f)
-                ny = std::min(200, ny + 1);
-
-            if (IsMouseInView())
             {
-                if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+                nx = std::max(3, nx - 1);
+                grid_shrank = true;
+            }
+            if (IsKeyPressed(KEY_RIGHT) || key_hold_time[1] > 0.3f)
+            {
+                nx = std::min(200, nx + 1);
+            }
+            if (IsKeyPressed(KEY_UP) || key_hold_time[2] > 0.3f)
+            {
+                ny = std::max(3, ny - 1);
+                grid_shrank = true;
+            }
+            if (IsKeyPressed(KEY_DOWN) || key_hold_time[3] > 0.3f)
+            {
+                ny = std::min(200, ny + 1);
+            }
+
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && IsMouseInView())
+            {
+                if (!dragging)
                 {
-                    if (!dragging)
-                    {
-                        drag_start = mouse_pos;
-                        dragging = true;
-                    }
-                    else
-                    {
-                        auto drag_end = Vector2(std::clamp(mouse_pos.x, 0.0f, GetViewScreenWidth()), std::clamp(mouse_pos.y, 0.0f, (float)GetScreenHeight()));
-
-                        DrawRectangleSafe(drag_end.x, drag_end.y, drag_start.x - drag_end.x, drag_start.y - drag_end.y, SKYBLUE);
-                        DrawRectangleLines(drag_end.x, drag_end.y, drag_start.x - drag_end.x, drag_start.y - drag_end.y, BLUE);
-
-                        auto grid_pos_1 = ScreenToGridPos(drag_start);
-                        auto grid_pos_2 = ScreenToGridPos(drag_end);
-
-                        int i1 = std::ceil(std::min(grid_pos_1.x, grid_pos_2.x) / dx);
-                        int i2 = std::floor(std::max(grid_pos_1.x, grid_pos_2.x) / dx);
-                        int j1 = std::ceil(std::min(grid_pos_1.y, grid_pos_2.y) / dy);
-                        int j2 = std::floor(std::max(grid_pos_1.y, grid_pos_2.y) / dy);
-
-                        selected_faces.clear();
-                        if (i1 < i2 || j1 < j2)
-                        {
-                            for (int i = std::max(i1, 0); i <= std::min(i2, nx); ++i)
-                                for (int j = std::max(j1, 0); j < std::min(j2, ny); ++j)
-                                    selected_faces.push_back({ 0, i, j });
-                            for (int i = std::max(i1, 0); i < std::min(i2, nx); ++i)
-                                for (int j = std::max(j1, 0); j <= std::min(j2, ny); ++j)
-                                    selected_faces.push_back({ 1, i, j });
-                        }
-                    }
+                    drag_start = mouse_pos;
+                    dragging = true;
                 }
                 else
                 {
-                    dragging = false;
+                    auto drag_end = Vector2(std::clamp(mouse_pos.x, 0.0f, GetViewScreenWidth()), std::clamp(mouse_pos.y, 0.0f, (float)GetScreenHeight()));
+
+                    DrawRectangleSafe(drag_end.x, drag_end.y, drag_start.x - drag_end.x, drag_start.y - drag_end.y, SKYBLUE);
+                    DrawRectangleLines(drag_end.x, drag_end.y, drag_start.x - drag_end.x, drag_start.y - drag_end.y, BLUE);
+
+                    auto grid_pos_1 = ScreenToGridPos(drag_start);
+                    auto grid_pos_2 = ScreenToGridPos(drag_end);
+
+                    int i1 = std::ceil(std::min(grid_pos_1.x, grid_pos_2.x) / dx);
+                    int i2 = std::floor(std::max(grid_pos_1.x, grid_pos_2.x) / dx);
+                    int j1 = std::ceil(std::min(grid_pos_1.y, grid_pos_2.y) / dy);
+                    int j2 = std::floor(std::max(grid_pos_1.y, grid_pos_2.y) / dy);
+
+                    selected_faces.clear();
+                    if (i1 < i2 || j1 < j2)
+                    {
+                        for (int i = std::max(i1, 0); i <= std::min(i2, nx); ++i)
+                            for (int j = std::max(j1, 0); j < std::min(j2, ny); ++j)
+                                selected_faces.push_back({ 0, i, j });
+                        for (int i = std::max(i1, 0); i < std::min(i2, nx); ++i)
+                            for (int j = std::max(j1, 0); j <= std::min(j2, ny); ++j)
+                                selected_faces.push_back({ 1, i, j });
+                    }
                 }
             }
+            else
+            {
+                dragging = false;
+            }
+            
 
             // toggle blocked face
             if (IsKeyPressed(KEY_B))
@@ -271,11 +288,14 @@ public:
                     else blocked_faces.insert(face);
                 }
             }
+
+            if (grid_shrank)
+                SanatiseFaceSets();
         }
         else
         {
             if (IsKeyPressed(KEY_S))
-                in_model_creator_mode = true;
+                in_render_mode = false;
 
             // Scale Velocity
             if (IsKeyDown(KEY_A))
@@ -313,6 +333,43 @@ public:
         zoom = 1 / max_scale;
     }
 
+    void SanatiseFaceSets()
+    {
+        // Remove faces which no longer conform to the current grid size
+        for (auto it = boundary_faces.begin(); it != boundary_faces.end(); )
+        {
+            bool is_pos_flow = (it->type == Boundary::FixedInflow && it->boundary_dir == 0);
+            if (it->component_dir == 0)
+            {
+                if (it->i > (is_pos_flow ? nx - 1 : nx) || it->j > ny - 1)
+                    it = boundary_faces.erase(it);
+                else ++it;
+            }
+            else
+            {
+                if (it->i > nx - 1 || it->j > (is_pos_flow ? ny - 1 : ny))
+                    it = boundary_faces.erase(it);
+                else ++it;
+            }
+        }
+
+        for (auto it = blocked_faces.begin(); it != blocked_faces.end(); ) 
+        {
+            if (it->component_dir == 0)
+            {
+                if (it->i > nx || it->j > ny - 1)
+                    it = blocked_faces.erase(it);
+                else ++it;
+            }
+            else
+            {
+                if (it->i > nx - 1 || it->j > ny)
+                    it = blocked_faces.erase(it);
+                else ++it;
+            }
+        }
+    }
+
     void DrawPannel()
     {
         int x1 = GetViewScreenWidth(), x2 = GetScreenWidth(), y1 = 0.0f, y2 = GetScreenHeight();
@@ -344,39 +401,108 @@ public:
             current_y += ysize + 50;
 
             DrawRectangleLinesEx(Rectangle(x1 + xoffset / 2, current_y, x2 - x1 - xoffset, 200), 2, BLACK);
-            DrawText("Inflow", x1 + xoffset, y1 + 10 + current_y, 20, BLACK);
+            DrawText("Fixed Inflow", x1 + xoffset, y1 + 10 + current_y, 20, BLACK);
             DrawText("Velocity", x1 + xoffset + 140, y1 + 60 + current_y, 20, BLACK);
             DrawText("Temperature", x1 + xoffset + 140, y1 + 100 + current_y, 20, BLACK);
             if (GuiTextBox(Rectangle(x1 + xoffset, y1 + 55 + current_y, 120, 30), velocity_input, 32, text_box_edit_mode[0]))
             {
                 text_box_edit_mode[0] = !text_box_edit_mode[0];
-                if (!IsValidFloat(velocity_input)) strcpy(velocity_input, "");
+                if (!IsValidFloat(velocity_input, true)) strcpy(velocity_input, "");
             }
             if (GuiTextBox(Rectangle(x1 + xoffset, y1 + 95 + current_y, 120, 30), temp_input, 32, text_box_edit_mode[1]))
             {
                 text_box_edit_mode[1] = !text_box_edit_mode[1];
-                if (!IsValidFloat(temp_input)) strcpy(temp_input, "");
+                if (!IsValidFloat(temp_input, true)) strcpy(temp_input, "");
             }
-            if (GuiButton(Rectangle(x1 + xoffset, y1 + 150 + current_y, 150, 40), direction_toggle == false ? "+ve direction" : "-ve direction"))
+            if (GuiButton(Rectangle(x1 + xoffset, y1 + 150 + current_y, 150, 40), direction_toggle[0] == false ? "+ve direction" : "-ve direction"))
             { 
-                direction_toggle = !direction_toggle;
+                direction_toggle[0] = !direction_toggle[0];
             }
             if (GuiButton(Rectangle(x2 - 100 - xoffset, y1 + 150 + current_y, 100, 40), "ADD")) 
             {
                 for (const auto& face : selected_faces)
                     boundary_faces.erase(Boundary(face));
 
+                char* endptr;
+                float temp = strtof(temp_input, &endptr);
+                float vel = strtof(velocity_input, &endptr);
+
                 for (const auto& face : selected_faces)
                 {
                     // Check for invalid boundary selection and skip in this case
+                    bool is_pos = direction_toggle[0] == 0;
+                    if (face.component_dir == 0)
+                    {
+                        if (face.i > (is_pos ? nx - 1 : nx) || face.i < (is_pos ? 0 : 1)) continue;
+                    }
+                    else
+                    {
+                        if (face.j > (is_pos ? ny - 1 : ny) || face.j < (is_pos ? 0 : 1)) continue;
+                    }
 
                     auto new_boundary = Boundary(face);
+                    new_boundary.optional_temp = temp;
+                    new_boundary.optional_velocity = vel;
+                    new_boundary.boundary_dir = direction_toggle[0];
+                    new_boundary.type = Boundary::FixedInflow;
+                    boundary_faces.insert(new_boundary);
+                }
+            }
+            current_y += 200 + 50;
+
+            DrawRectangleLinesEx(Rectangle(x1 + xoffset / 2, current_y, x2 - x1 - xoffset, 100), 2, BLACK);
+            DrawText("Open", x1 + xoffset, y1 + 10 + current_y, 20, BLACK);
+            if (GuiButton(Rectangle(x2 - 100 - xoffset, y1 + 50 + current_y, 100, 40), "ADD"))
+            {
+                for (const auto& face : selected_faces)
+                    boundary_faces.erase(Boundary(face));
+
+                for (const auto& face : selected_faces)
+                {
+                    auto new_boundary = Boundary(face);
+                    new_boundary.type = Boundary::Open;
+                    boundary_faces.insert(new_boundary);
+                }
+            }
+            current_y += 100 + 50;
+
+            DrawRectangleLinesEx(Rectangle(x1 + xoffset / 2, current_y, x2 - x1 - xoffset, 150), 2, BLACK);
+            DrawText("Fixed Outflow", x1 + xoffset, y1 + 10 + current_y, 20, BLACK);
+            DrawText("Velocity", x1 + xoffset + 140, y1 + 60 + current_y, 20, BLACK);
+            if (GuiTextBox(Rectangle(x1 + xoffset, y1 + 55 + current_y, 120, 30), velocity_input2, 32, text_box_edit_mode[2]))
+            {
+                text_box_edit_mode[2] = !text_box_edit_mode[2];
+                if (!IsValidFloat(velocity_input2, true)) strcpy(velocity_input2, "");
+            }
+            if (GuiButton(Rectangle(x1 + xoffset, y1 + 100 + current_y, 150, 40), direction_toggle[1] == false ? "+ve direction" : "-ve direction"))
+            {
+                direction_toggle[1] = !direction_toggle[1];
+            }
+            if (GuiButton(Rectangle(x2 - 100 - xoffset, y1 + 100 + current_y, 100, 40), "ADD"))
+            {
+                for (const auto& face : selected_faces)
+                    boundary_faces.erase(Boundary(face));
+
+                for (const auto& face : selected_faces)
+                {
                     char* endptr;
-                    float result = strtof(temp_input, &endptr);
-                    new_boundary.optional_temp = result;
-                    result = strtof(velocity_input, &endptr);
-                    new_boundary.optional_temp = result;
-                    new_boundary.boundary_dir = direction_toggle;
+                    float vel = strtof(velocity_input2, &endptr);
+
+                    // Check for invalid boundary selection and skip in this case
+                    bool is_pos = direction_toggle[1] == 0;
+                    if (face.component_dir == 0)
+                    {
+                        if (face.i > (is_pos ? nx - 1 : nx) || face.i < (is_pos ? 0 : 1)) continue;
+                    }
+                    else
+                    {
+                        if (face.j > (is_pos ? ny - 1 : ny) || face.j < (is_pos ? 0 : 1)) continue;
+                    }
+
+                    auto new_boundary = Boundary(face);
+                    new_boundary.boundary_dir = direction_toggle[1];
+                    new_boundary.optional_velocity = vel;
+                    new_boundary.type = Boundary::FixedOutflow;
                     boundary_faces.insert(new_boundary);
                 }
             }
@@ -403,9 +529,10 @@ public:
         }
 
         // Draw Boundary & Blocked Faces
-        float bold_width = std::max(zoom / 4000.0f, 1.5f);
+        float bold_width = std::max(zoom / 4000.0f, 2.0f);
         float ofset = 0.5f * bold_width;
 
+        // Border outline
         DrawLineEx({ offsetX, offsetY - ofset },                   { offsetX, offsetY + ny * cellHeight + ofset }, bold_width, BLACK);
         DrawLineEx({ offsetX + nx * cellWidth, offsetY - ofset },  { offsetX + nx * cellWidth, offsetY + ny * cellHeight + ofset }, bold_width, BLACK);
         DrawLineEx({ offsetX - ofset, offsetY },                   { offsetX + nx * cellWidth + ofset, offsetY }, bold_width, BLACK);
@@ -415,27 +542,25 @@ public:
         {
             float xPos = face.i * cellWidth + offsetX;
             float yPos = face.j * cellHeight + offsetY;
-            if (face.dir == 0)
+            if (face.component_dir == 0)
                 DrawLineEx({ xPos, yPos - ofset }, { xPos, yPos + cellHeight + ofset }, bold_width, BLACK);
             else
                 DrawLineEx({ xPos - ofset, yPos }, { xPos + cellHeight + ofset, yPos }, bold_width, BLACK);
         }
 
-        for (const auto& face : boundary_faces)
+        for (const auto& boundary : boundary_faces)
         {
-            float xPos = face.i * cellWidth + offsetX;
-            float yPos = face.j * cellHeight + offsetY;
-            if (face.dir == 0)
-                DrawLineEx({ xPos, yPos - ofset }, { xPos, yPos + cellHeight + ofset }, bold_width, PURPLE);
-            else
-                DrawLineEx({ xPos - ofset, yPos }, { xPos + cellHeight + ofset, yPos }, bold_width, PURPLE);
+            float xPos = boundary.i * cellWidth + offsetX;
+            float yPos = boundary.j * cellHeight + offsetY;
+
+            DrawBoundary(boundary.component_dir, boundary.boundary_dir, xPos, yPos, cellWidth, cellHeight, bold_width, boundary.type);
         }
 
         for (const auto& face : selected_faces)
         {
             float xPos = face.i * cellWidth + offsetX;
             float yPos = face.j * cellHeight + offsetY;
-            if (face.dir == 0)
+            if (face.component_dir == 0)
                 DrawLineEx({ xPos, yPos - ofset }, { xPos, yPos + cellHeight + ofset }, bold_width, RED);
             else
                 DrawLineEx({ xPos - ofset, yPos }, { xPos + cellHeight + ofset, yPos }, bold_width, RED);

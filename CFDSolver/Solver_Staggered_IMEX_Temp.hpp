@@ -18,6 +18,7 @@ public:
     SolverStaggeredIMEXTemp(Interface& interface) : interface(interface), nx(interface.nx), ny(interface.ny), dx(interface.dx), dy(interface.dy)
     {
         SetBlockedFaces(interface);
+        SetBoundaries(interface);
         interface.SetData(*this);
     }
     bool is_solving{ true };
@@ -30,7 +31,8 @@ public:
             for (int j = 0; j < ny; ++j) 
             {
                 divergence(i, j) = ((u(i + 1, j) - u(i, j)) * dy + 
-                                    (v(i, j + 1) - v(i, j)) * dx);
+                                    (v(i, j + 1) - v(i, j)) * dx +
+                                    divergence_scr(i,j));
             }
         }
     }
@@ -55,7 +57,7 @@ public:
                     if (flux > 0.0)
                     {
                         value = flux >= 0.0 ? u(i - 1, j) : u(i, j);
-                        coeff = flux / (dx * dy);
+                        coeff = fluid.density * flux / (dx * dy);
                         u_coeff(i, j) += coeff;
                         u_scr(i, j) += coeff * value;
                     }
@@ -68,7 +70,7 @@ public:
                     if (flux > 0.0)
                     {
                         value = flux >= 0.0 ? u(i + 1, j) : u(i, j);
-                        coeff = flux / (dx * dy);
+                        coeff = fluid.density * flux / (dx * dy);
                         u_coeff(i, j) += coeff;
                         u_scr(i, j) += coeff * value;
                     }
@@ -81,7 +83,7 @@ public:
                     if (flux > 0.0)
                     {
                         value = flux >= 0.0 ? u(i, j - 1) : u(i, j);
-                        coeff = flux / (dx * dy);
+                        coeff = fluid.density * flux / (dx * dy);
                         u_coeff(i, j) += coeff;
                         u_scr(i, j) += coeff * value;
                     }
@@ -91,7 +93,7 @@ public:
                     if (flux > 0.0)
                     {
                         value = flux >= 0.0 ? u(i, j - 1) : u(i, j);
-                        coeff = flux / (dx * dy);
+                        coeff = fluid.density * flux / (dx * dy);
                         u_coeff(i, j) += coeff;
                         u_scr(i, j) += coeff * value;
                     }
@@ -104,7 +106,7 @@ public:
                     if (flux > 0.0)
                     {
                         value = flux >= 0.0 ? u(i, j + 1) : u(i, j);
-                        coeff = flux / (dx * dy);
+                        coeff = fluid.density * flux / (dx * dy);
                         u_coeff(i, j) += coeff;
                         u_scr(i, j) += coeff * value;
                     }
@@ -114,7 +116,7 @@ public:
                     if (flux > 0.0)
                     {
                         value = flux >= 0.0 ? u(i, j + 1) : u(i, j);
-                        coeff = flux / (dx * dy);
+                        coeff = fluid.density * flux / (dx * dy);
                         u_coeff(i, j) += coeff;
                         u_scr(i, j) += coeff * value;
                     }
@@ -136,7 +138,7 @@ public:
                     if (flux > 0.0)
                     {
                         value = flux >= 0.0 ? v(i, j - 1) : v(i, j);
-                        coeff = flux / (dx * dy);
+                        coeff = fluid.density * flux / (dx * dy);
                         v_coeff(i, j) += coeff;
                         v_scr(i, j) += coeff * value;
                     }
@@ -149,7 +151,7 @@ public:
                     if (flux > 0.0)
                     {
                         value = flux >= 0.0 ? v(i, j + 1) : v(i, j);
-                        coeff = flux / (dx * dy);
+                        coeff = fluid.density * flux / (dx * dy);
                         v_coeff(i, j) += coeff;
                         v_scr(i, j) += coeff * value;
                     }
@@ -162,7 +164,7 @@ public:
                     if (flux > 0.0)
                     {
                         value = flux >= 0.0 ? v(i - 1, j) : v(i, j);
-                        coeff = flux / (dx * dy);
+                        coeff = fluid.density * flux / (dx * dy);
                         v_coeff(i, j) += coeff;
                         v_scr(i, j) += coeff * value;
                     }
@@ -172,7 +174,7 @@ public:
                     if (flux > 0.0)
                     {
                         value = flux >= 0.0 ? v(i - 1, j) : v(i, j);
-                        coeff = flux / (dx * dy);
+                        coeff = fluid.density * flux / (dx * dy);
                         v_coeff(i, j) += coeff;
                         v_scr(i, j) += coeff * value;
                     }
@@ -185,7 +187,7 @@ public:
                     if (flux > 0.0)
                     {
                         value = flux >= 0.0 ? v(i + 1, j) : v(i, j);
-                        coeff = flux / (dx * dy);
+                        coeff = fluid.density * flux / (dx * dy);
                         v_coeff(i, j) += coeff;
                         v_scr(i, j) += coeff * value;
                     }
@@ -195,7 +197,7 @@ public:
                     if (flux > 0.0)
                     {
                         value = flux >= 0.0 ? v(i + 1, j) : v(i, j);
-                        coeff = flux / (dx * dy);
+                        coeff = fluid.density * flux / (dx * dy);
                         v_coeff(i, j) += coeff;
                         v_scr(i, j) += coeff * value;
                     }
@@ -299,199 +301,6 @@ public:
         }
     }
 
-    //void ComputeConvectiveFluxesAndDiffusiveTerms()
-    //{
-    //    double flux = 0.0;
-    //    double value = 0.0;
-    //    double coeff = 0.0;
-    //
-    //    for (int i = 1; i < nx; ++i)
-    //    {
-    //        for (int j = 0; j < ny; ++j)
-    //        {
-    //            if (u_face_flags(i, j) == 1)
-    //                continue;
-    //
-    //            if (u_face_flags(i - 1, j) != 1)
-    //            {
-    //                // Inline Left: u flux
-    //                flux = dy * ((u(i, j) + u(i - 1, j)) / 2.0);
-    //                if (flux > 0.0)
-    //                {
-    //                    value = flux >= 0.0 ? u(i - 1, j) : u(i, j);
-    //                    coeff = flux / (dx * dy);
-    //                    u_coeff(i, j) += coeff;
-    //                    u_scr(i, j) += coeff * value;
-    //                }
-    //
-    //                // Inline Left: u diff
-    //                coeff = fluid.kinematic_viscosity / (dx * dx);
-    //                value = u(i - 1, j);
-    //                u_coeff(i, j) += coeff;
-    //                u_scr(i, j) += coeff * value;
-    //            }
-    //
-    //            if (u_face_flags(i + 1, j) != 1)
-    //            {
-    //                // Inline Right: u flux
-    //                flux = dy * -((u(i, j) + u(i + 1, j)) / 2.0);
-    //                if (flux > 0.0)
-    //                {
-    //                    value = flux >= 0.0 ? u(i + 1, j) : u(i, j);
-    //                    coeff = flux / (dx * dy);
-    //                    u_coeff(i, j) += coeff;
-    //                    u_scr(i, j) += coeff * value;
-    //                }
-    //
-    //                // Inline Right: u diff
-    //                coeff = fluid.kinematic_viscosity / (dx * dx);
-    //                value = u(i + 1, j);
-    //                u_coeff(i, j) += coeff;
-    //                u_scr(i, j) += coeff * value;
-    //            }
-    //
-    //            if (j != 0 && v_face_flags(i, j) != 1 && v_face_flags(i - 1, j) != 1 && u_face_flags(i, j - 1) != 1)
-    //            {
-    //                // Bottom Left: u flux
-    //                flux = (dx / 2.0) * v(i - 1, j);
-    //                if (flux > 0.0)
-    //                {
-    //                    value = flux >= 0.0 ? u(i, j - 1) : u(i, j);
-    //                    coeff = flux / (dx * dy);
-    //                    u_coeff(i, j) += coeff;
-    //                    u_scr(i, j) += coeff * value;
-    //                }
-    //
-    //                // Bottom Right: u flux
-    //                flux = (dx / 2.0) * v(i, j);
-    //                if (flux > 0.0)
-    //                {
-    //                    value = flux >= 0.0 ? u(i, j - 1) : u(i, j);
-    //                    coeff = flux / (dx * dy);
-    //                    u_coeff(i, j) += coeff;
-    //                    u_scr(i, j) += coeff * value;
-    //                }
-    //
-    //                // Bottom: u diff
-    //                coeff = fluid.kinematic_viscosity / (dy * dy);
-    //                value = u(i, j - 1);
-    //                u_coeff(i, j) += coeff;
-    //                u_scr(i, j) += coeff * value;
-    //            }
-    //
-    //            if (j != ny - 1 && v_face_flags(i, j + 1) != 1 && v_face_flags(i - 1, j + 1) != 1 && u_face_flags(i, j + 1) != 1)
-    //            {
-    //                // Top Left: u flux
-    //                flux = -(dx / 2.0) * v(i - 1, j + 1);
-    //                if (flux > 0.0)
-    //                {
-    //                    value = flux >= 0.0 ? u(i, j + 1) : u(i, j);
-    //                    coeff = flux / (dx * dy);
-    //                    u_coeff(i, j) += coeff;
-    //                    u_scr(i, j) += coeff * value;
-    //                }
-    //
-    //                // Top Right: u flux
-    //                flux = -(dx / 2.0) * v(i, j + 1);
-    //                if (flux > 0.0)
-    //                {
-    //                    value = flux >= 0.0 ? u(i, j + 1) : u(i, j);
-    //                    coeff = flux / (dx * dy);
-    //                    u_coeff(i, j) += coeff;
-    //                    u_scr(i, j) += coeff * value;
-    //                }
-    //
-    //                // Top: u diff
-    //                coeff = fluid.kinematic_viscosity / (dy * dy);
-    //                value = u(i, j + 1);
-    //                u_coeff(i, j) += coeff;
-    //                u_scr(i, j) += coeff * value;
-    //            }
-    //        }
-    //    }
-    //
-    //    for (int i = 0; i < nx; ++i)
-    //    {
-    //        for (int j = 1; j < ny; ++j)
-    //        {
-    //            if (v_face_flags(i, j) == 1)
-    //                continue;
-    //
-    //            if (v_face_flags(i, j - 1) != 1)
-    //            {
-    //                // Inline Left: v flux
-    //                flux = dy * ((v(i, j) + v(i, j - 1)) / 2.0);
-    //                if (flux > 0.0)
-    //                {
-    //                    value = flux >= 0.0 ? v(i, j - 1) : v(i, j);
-    //                    coeff = flux / (dx * dy);
-    //                    v_coeff(i, j) += coeff;
-    //                    v_scr(i, j) += coeff * value;
-    //                }
-    //            }
-    //
-    //            if (v_face_flags(i, j + 1) != 1)
-    //            {
-    //                // Inline Right: v flux
-    //                flux = dy * -((v(i, j) + v(i, j + 1)) / 2.0);
-    //                if (flux > 0.0)
-    //                {
-    //                    value = flux >= 0.0 ? v(i, j + 1) : v(i, j);
-    //                    coeff = flux / (dx * dy);
-    //                    v_coeff(i, j) += coeff;
-    //                    v_scr(i, j) += coeff * value;
-    //                }
-    //            }
-    //
-    //            if (i != 0 && u_face_flags(i + 1, j) + u_face_flags(i + 1, j - 1) + v_face_flags(i + 1, j))
-    //            {
-    //                // Bottom Left: v flux
-    //                flux = (dy / 2.0) * u(i, j - 1);
-    //                if (flux > 0.0)
-    //                {
-    //                    value = flux >= 0.0 ? v(i - 1, j) : v(i, j);
-    //                    coeff = flux / (dx * dy);
-    //                    v_coeff(i, j) += coeff;
-    //                    v_scr(i, j) += coeff * value;
-    //                }
-    //
-    //                // Bottom Right: v flux
-    //                flux = (dy / 2.0) * u(i, j);
-    //                if (flux > 0.0)
-    //                {
-    //                    value = flux >= 0.0 ? v(i - 1, j) : v(i, j);
-    //                    coeff = flux / (dx * dy);
-    //                    v_coeff(i, j) += coeff;
-    //                    v_scr(i, j) += coeff * value;
-    //                }
-    //            }
-    //
-    //            if (i != nx - 1 && u_face_flags(i, j) + u_face_flags(i, j - 1) + v_face_flags(i - 1, j))
-    //            {
-    //                // Top Left: v flux
-    //                flux = -(dy / 2.0) * u(i + 1, j - 1);
-    //                if (flux > 0.0)
-    //                {
-    //                    value = flux >= 0.0 ? v(i + 1, j) : v(i, j);
-    //                    coeff = flux / (dx * dy);
-    //                    v_coeff(i, j) += coeff;
-    //                    v_scr(i, j) += coeff * value;
-    //                }
-    //
-    //                // Top Right: v flux
-    //                flux = -(dy / 2.0) * u(i + 1, j);
-    //                if (flux > 0.0)
-    //                {
-    //                    value = flux >= 0.0 ? v(i + 1, j) : v(i, j);
-    //                    coeff = flux / (dx * dy);
-    //                    v_coeff(i, j) += coeff;
-    //                    v_scr(i, j) += coeff * value;
-    //                }
-    //            }
-    //        }
-    //    }
-    //}
-
     void ComputeConvectiveFluxesAndDiffusiveTermsForTemperature()
     {
         double value = 0.0;
@@ -585,6 +394,8 @@ public:
                 cell_v(i, j) = (v(i, j) + v(i, j + 1)) / 2.0;
             }
         }
+
+        CorrectBoundaryCellVelocities();
     }
 
     void SolvePressure()
@@ -663,7 +474,7 @@ public:
                 for (int j = 1; j < ny; ++j)
                 {
                     if (v_face_flags(i, j, Flag::Open))
-                        v(i, j) = (v(i, j) + dt * (v_scr(i, j) + (p(i, j - 1) - p(i, j)) / (dx * fluid.density))) / (1 + dt * v_coeff(i, j));
+                        v(i, j) = (v(i, j) + dt * (v_scr(i, j) + (p(i, j - 1) - p(i, j)) / dx) / fluid.density) / (1 + dt * v_coeff(i, j));
                 }
             }
         }
@@ -697,6 +508,7 @@ public:
             v_scr.reset();
             u_scr.reset();
             p_correction.reset();
+            divergence_scr.reset();
             u_coeff.reset();
             v_coeff.reset();
             t_scr.reset();
@@ -733,10 +545,10 @@ public:
             if (iter % 10 == 0)
             {
                 residual = p_correction / p;
-                double maxPressureResidual = relaxation * (*std::max_element(residual.begin(), residual.end()));
+                double maxPressureResidual = relaxation * (std::max(std::abs(*std::max_element(residual.begin(), residual.end())), std::abs(*std::min_element(residual.begin(), residual.end()))));
 
                 residual = (t - t_previous) / t;
-                double maxTemperatureResidual = (*std::max_element(residual.begin(), residual.end()));
+                double maxTemperatureResidual = std::max(std::abs(*std::max_element(residual.begin(), residual.end())), std::abs(*std::min_element(residual.begin(), residual.end())));
 
                 double maxDivergence = std::max(std::abs(*std::ranges::min_element(divergence.begin(), divergence.end())), std::abs(*std::ranges::max_element(divergence.begin(), divergence.end())));
 
@@ -757,35 +569,52 @@ public:
     {
         for (auto& boundary : inlet_boundary_conditions)
             boundary.ApplyForVelocity(*this);
+        
+        for (auto& boundary : outlet_boundary_conditions)
+            boundary.ApplyForVelocity(*this);
 
         // Friction - ToDo apply from each blocked face take half for completeness - TODO blocked faces
-        //coeff = fluid.kinematic_viscosity / (dy / 2);
+        double coeff = fluid.kinematic_viscosity / (dy / 2);
+        for (int i = 1; i < nx; ++i)
+        {
+            // Top boundary
+            u_coeff(i, 0) += coeff;
+            u_scr(i, 0) += 0.0 * coeff;
+        
+            // Bottom boundary
+            u_coeff(i, ny - 1) += coeff;
+            u_scr(i, ny - 1) += 0.0 * coeff;
+        }
+        coeff = fluid.kinematic_viscosity / (dx / 2);
+        for (int j = 1; j < ny; ++j)
+        {
+            // Left boundary
+            v_coeff(0, j) += coeff;
+            v_scr(0, j) += 0.0 * coeff;
+        
+            // Right boundary
+            v_coeff(nx - 1, j) += coeff;
+            v_scr(nx - 1, j) += 0.0 * coeff;
+        }
+
         //for (int i = 1; i < nx; ++i)
         //{
-        //    // Top boundary
-        //    u_coeff(i, 0) += coeff;
-        //    u_scr(i, 0) += 0.0 * coeff;
-        //
-        //    // Bottom boundary
-        //    u_coeff(i, ny - 1) += coeff;
-        //    u_scr(i, ny - 1) += 0.0 * coeff;
+        //    for (int j = 0; j < ny; ++j)
+        //    {
+        //    }
         //}
-        //coeff = fluid.kinematic_viscosity / (dx / 2);
-        //for (int j = 1; j < ny; ++j)
-        //{
-        //    // Left boundary
-        //    v_coeff(0, j) += coeff;
-        //    v_scr(0, j) += 0.0 * coeff;
         //
-        //    // Right boundary
-        //    v_coeff(nx - 1, j) += coeff;
-        //    v_scr(nx - 1, j) += 0.0 * coeff;
+        //for (int i = 0; i < nx; ++i)
+        //{
+        //    for (int j = 1; j < ny; ++j)
+        //    {
+        //    }
         //}
     }
 
     void ApplyPressureBoundaryConditions()
     {
-        for (auto& boundary : outlet_boundary_condition)
+        for (auto& boundary : open_boundary_condition)
             boundary.ApplyForPressure(*this);
     }
 
@@ -795,29 +624,16 @@ public:
             boundary.ApplyForTemperature(*this);
     }
 
-    void SetBlockedFaces(Interface& interface)
+    void CorrectBoundaryCellVelocities()
     {
-        u_face_flags.setFlag(Flag::Open);
-        v_face_flags.setFlag(Flag::Open);
+        for (auto& boundary : inlet_boundary_conditions)
+            boundary.CorrectBoundaryCellVelocities(*this);
 
-        // Boundary faces
-        for (int j = 0; j < ny; ++j)
-        {
-            u_face_flags.clearFlag(0, j, Flag::Open);
-            u_face_flags.clearFlag(nx, j, Flag::Open);
-        }
-        for (int i = 0; i < nx; ++i)
-        {
-            v_face_flags.clearFlag(i, 0, Flag::Open);
-            v_face_flags.clearFlag(i, ny, Flag::Open);
-        }
+        for (auto& boundary : outlet_boundary_conditions)
+            boundary.CorrectBoundaryCellVelocities(*this);
 
-        // User set faces
-        for (auto& face : interface.blocked_faces)
-        {
-            if (face.dir == 0) u_face_flags.clearFlag(face.i, face.j, Flag::Open);
-            else v_face_flags.clearFlag(face.i, face.j, Flag::Open);
-        }
+        for (auto& boundary : open_boundary_condition)
+            boundary.CorrectBoundaryCellVelocities(*this);
     }
 
     struct FluidProperties
@@ -846,6 +662,7 @@ public:
     PhysicalField p_correction_old{ nx, ny };
 
     PhysicalField divergence{ nx, ny };
+    PhysicalField divergence_scr{ nx, ny };
 
     PhysicalField t{ nx, ny };
     PhysicalField t_scr{ nx, ny };
@@ -874,7 +691,73 @@ public:
     FlagField u_face_flags{ nx + 1, ny }; 
     FlagField v_face_flags{ nx, ny + 1 }; 
 
-    // Boundaries
+    ////////////////
+    // Boundaries //
+    ////////////////
+
+    void SetBlockedFaces(Interface& interface)
+    {
+        u_face_flags.setFlag(Flag::Open);
+        v_face_flags.setFlag(Flag::Open);
+
+        // Boundary faces
+        for (int j = 0; j < ny; ++j)
+        {
+            u_face_flags.clearFlag(0, j, Flag::Open);
+            u_face_flags.clearFlag(nx, j, Flag::Open);
+        }
+        for (int i = 0; i < nx; ++i)
+        {
+            v_face_flags.clearFlag(i, 0, Flag::Open);
+            v_face_flags.clearFlag(i, ny, Flag::Open);
+        }
+
+        // User set faces
+        for (auto& face : interface.blocked_faces)
+        {
+            if (face.component_dir == 0) u_face_flags.clearFlag(face.i, face.j, Flag::Open);
+            else v_face_flags.clearFlag(face.i, face.j, Flag::Open);
+        }
+    }
+
+    void SetBoundaries(Interface& interface)
+    {
+        // User set 
+        for (auto& boundary : interface.boundary_faces)
+        {
+            if (boundary.type == Boundary::FixedInflow)
+            {
+                auto& bc = inlet_boundary_conditions.emplace_back(boundary.boundary_dir, boundary.component_dir);
+                bc.inlet_temperature = boundary.optional_temp;
+                bc.inlet_velocity = boundary.optional_velocity;
+                bc.boundary_faces.push_back({ boundary.i, boundary.j });
+                boundary.component_dir == 0 ? u_face_flags.clearFlag(boundary.i, boundary.j, Flag::Open) : v_face_flags.clearFlag(boundary.i, boundary.j, Flag::Open);
+            }
+            if (boundary.type == Boundary::FixedOutflow)
+            {
+                auto& bc = outlet_boundary_conditions.emplace_back(boundary.boundary_dir, boundary.component_dir);
+                bc.outlet_velocity = boundary.optional_velocity;
+                bc.boundary_faces.push_back({ boundary.i, boundary.j });
+                boundary.component_dir == 0 ? u_face_flags.clearFlag(boundary.i, boundary.j, Flag::Open) : v_face_flags.clearFlag(boundary.i, boundary.j, Flag::Open);
+            }
+            else if (boundary.type == Boundary::Open)
+            {
+                if ((boundary.component_dir == 0 && boundary.i != nx) || (boundary.component_dir == 1 && boundary.j != ny))
+                {
+                    auto& bc = open_boundary_condition.emplace_back(0, boundary.component_dir);
+                    bc.boundary_faces.push_back({ boundary.i, boundary.j });
+                    u_face_flags.clearFlag(boundary.i, boundary.j, Flag::Open);
+                }
+
+                if ((boundary.component_dir == 0 && boundary.i != 0) || (boundary.component_dir == 1 && boundary.j != 0))
+                {
+                    auto& bc = open_boundary_condition.emplace_back(1, boundary.component_dir);
+                    bc.boundary_faces.push_back({ boundary.i, boundary.j });
+                    v_face_flags.clearFlag(boundary.i, boundary.j, Flag::Open);
+                }
+            }
+        }
+    }
 
     struct BoundaryCondition
     {
@@ -885,21 +768,22 @@ public:
         std::vector<std::pair<int, int>> boundary_faces;
     };
 
-    struct InletBoundaryCondition : public BoundaryCondition
+    struct FixedInletBoundaryCondition : public BoundaryCondition
     {
-        InletBoundaryCondition(bool direction, bool component) : BoundaryCondition(direction, component) {}
+        FixedInletBoundaryCondition(bool direction, bool component) : BoundaryCondition(direction, component) {}
 
         void ApplyForVelocity(SolverStaggeredIMEXTemp& solver)
         {
+            int offset = direction == 0 ? 1 : -1;
+            int cell_offset = direction == 0 ? 0 : -1;
             if (component == 0) // u
             {
                 double flux = inlet_velocity * solver.dy;
-                double coeff = flux / (solver.dx * solver.dy);
+                double coeff = solver.fluid.density * flux / (solver.dx * solver.dy);
                 for (auto [i, j] : boundary_faces)
                 {
-                    int offset = direction == 0 ? 1 : -1;
-
-                    solver.u(i, j) = offset * inlet_velocity;
+                    //solver.u(i, j) = offset * inlet_velocity;
+                    solver.divergence_scr(i + cell_offset, j) -= inlet_velocity * solver.dy;
                     solver.u_coeff(i + offset, j) += coeff;
                     solver.u_scr(i + offset, j) += coeff * offset * inlet_velocity;
                 }
@@ -907,12 +791,11 @@ public:
             else // v
             {
                 double flux = inlet_velocity * solver.dx;
-                double coeff = flux / (solver.dx * solver.dy);
+                double coeff = solver.fluid.density * flux / (solver.dx * solver.dy);
                 for (auto [i, j] : boundary_faces)
                 {
-                    int offset = direction == 0 ? 1 : -1;
-
-                    solver.v(i, j) = offset * inlet_velocity;
+                    //solver.v(i, j) = offset * inlet_velocity;
+                    solver.divergence_scr(i, j + cell_offset) -= inlet_velocity * solver.dx;
                     solver.v_coeff(i, j + offset) += coeff;
                     solver.v_scr(i, j + offset) += coeff * offset * inlet_velocity;
                 }
@@ -921,30 +804,48 @@ public:
 
         void ApplyForTemperature(SolverStaggeredIMEXTemp& solver)
         {
+            int offset = direction == 0 ? 0 : -1;
             if (component == 0) // u
             {
-                double flux = inlet_velocity * solver.fluid.density * solver.dy;
-                double coeff = flux / (solver.dx * solver.dy);
+                double massflux = inlet_velocity * solver.fluid.density * solver.dy;
+                double coeff = massflux / (solver.dx * solver.dy);
 
                 for (auto [i, j] : boundary_faces)
                 {
-                    int offset = direction == 0 ? 0 : -1;
-
                     solver.t_coeff(i + offset, j) += coeff;
                     solver.t_scr(i + offset, j) += coeff * inlet_temperature;
                 }
             }
             else // v
             {
-                double flux = inlet_velocity * solver.fluid.density * solver.dx;
-                double coeff = flux / (solver.dx * solver.dy);
+                double massflux = inlet_velocity * solver.fluid.density * solver.dx;
+                double coeff = massflux / (solver.dx * solver.dy);
 
                 for (auto [i, j] : boundary_faces)
                 {
-                    int offset = direction == 0 ? 0 : -1;
-
                     solver.t_coeff(i, j + offset) += coeff;
                     solver.t_scr(i, j + offset) += coeff * inlet_temperature;
+                }
+            }
+        }
+
+        void CorrectBoundaryCellVelocities(SolverStaggeredIMEXTemp& solver)
+        {
+            int offset = direction == 0 ? 1 : -1;
+            int cell_offset = direction == 0 ? 0 : -1;
+            if (component == 0) // u
+            {
+                for (auto [i, j] : boundary_faces)
+                {
+                    solver.cell_u(i + cell_offset, j) += offset * inlet_velocity / 2.0;
+                }
+            }
+            else // v
+            {
+                int cell_offset = direction == 0 ? 0 : -1;
+                for (auto [i, j] : boundary_faces)
+                {
+                    solver.cell_v(i, j + cell_offset) += offset * inlet_velocity / 2.0;
                 }
             }
         }
@@ -953,9 +854,60 @@ public:
         double inlet_velocity{};
     };
 
-    struct OutletBoundaryCondition : public BoundaryCondition
+    struct FixedOutletBoundaryCondition : public BoundaryCondition
     {
-        OutletBoundaryCondition(bool direction, bool component) : BoundaryCondition(direction, component) {}
+        FixedOutletBoundaryCondition(bool direction, bool component) : BoundaryCondition(direction, component) {}
+
+        void ApplyForVelocity(SolverStaggeredIMEXTemp& solver)
+        {
+            if (component == 0) // u
+            {
+                for (auto [i, j] : boundary_faces)
+                {
+                    int offset = direction == 0 ? -1 : 1;
+                    int cell_offset = direction == 0 ? 0 : -1;
+                    //solver.u(i, j) = offset * outlet_velocity;
+                    solver.divergence_scr(i + cell_offset, j) += outlet_velocity * solver.dy;
+                }
+            }
+            else // v
+            {
+                for (auto [i, j] : boundary_faces)
+                {
+                    int offset = direction == 0 ? -1 : 1;
+                    int cell_offset = direction == 0 ? 0 : -1;
+                    //solver.v(i, j) = offset * outlet_velocity;
+                    solver.divergence_scr(i, j + cell_offset) += outlet_velocity * solver.dx;
+                }
+            }
+        }
+        void CorrectBoundaryCellVelocities(SolverStaggeredIMEXTemp& solver)
+        {
+            int offset = direction == 0 ? -1 : 1;
+            int cell_offset = direction == 0 ? 0 : -1;
+            if (component == 0) // u
+            {
+                for (auto [i, j] : boundary_faces)
+                {
+                    solver.cell_u(i + cell_offset, j) += outlet_velocity / 2.0;
+                }
+            }
+            else // v
+            {
+                int cell_offset = direction == 0 ? 0 : -1;
+                for (auto [i, j] : boundary_faces)
+                {
+                    solver.cell_v(i, j + cell_offset) += offset * outlet_velocity / 2.0;
+                }
+            }
+
+        }
+        double outlet_velocity{};
+    };
+
+    struct OpenBoundaryCondition : public BoundaryCondition
+    {
+        OpenBoundaryCondition(bool direction, bool component) : BoundaryCondition(direction, component) {}
 
         void ApplyForPressure(SolverStaggeredIMEXTemp& solver)
         {
@@ -977,6 +929,11 @@ public:
             }
         }
 
+        void CorrectBoundaryCellVelocities(SolverStaggeredIMEXTemp& solver)
+        {
+
+        }
+
         double pressure{};
     };
 
@@ -985,8 +942,9 @@ public:
 
     };
 
-    std::vector<InletBoundaryCondition> inlet_boundary_conditions;
-    std::vector<OutletBoundaryCondition> outlet_boundary_condition;
+    std::vector<FixedInletBoundaryCondition> inlet_boundary_conditions;
+    std::vector<FixedOutletBoundaryCondition> outlet_boundary_conditions;
+    std::vector<OpenBoundaryCondition> open_boundary_condition;
     std::vector<FrictionBoundaryCondition> friction_boundary_condition;
 
     // TODO
