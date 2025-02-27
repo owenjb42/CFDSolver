@@ -18,5 +18,6 @@ target_link_libraries(raygui PUBLIC raylib)
 # ======== CFD Solver ========
 add_executable(CFDSolver CFDSolver/main.cpp 
 			   CFDSolver/Interface.cpp 
-			   CFDSolver/Helper.cpp)
+			   CFDSolver/Helper.cpp 
+			   CFDSolver/BoundaryControl.cpp)
 target_link_libraries(CFDSolver PUBLIC raylib raygui)

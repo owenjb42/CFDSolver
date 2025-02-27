@@ -1,4 +1,6 @@
 #include "Helper.hpp"
+#include <algorithm>
+#include <cmath>
 
 void DrawArrow(float x1, float y1, float x2, float y2, float size, bool double_headed, Color color)
 {
@@ -98,25 +100,69 @@ void DrawTriangleSafe(Vector2 p1, Vector2 p2, Vector2 p3, Color color)
     DrawTriangle(p1, p2, p3, color);
 }
 
-bool IsValidFloat(const char* text, bool pos) {
+bool IsValidFloat(const char* text, bool pos) 
+{
     bool hasDecimal = false;
     bool hasDigit = false;
-    for (int i = 0; text[i] != '\0'; i++) {
-        if (text[i] == '.' && !hasDecimal) {
+    for (int i = 0; text[i] != '\0'; i++) 
+    {
+        if (text[i] == '.' && !hasDecimal) 
+        {
             hasDecimal = true;
         }
-        else if (isdigit(text[i])) {
+        else if (isdigit(text[i])) 
+        {
             hasDigit = true;
         }
-        else if (i == 0 && text[i] == '-') {
+        else if (i == 0 && text[i] == '-') 
+        {
             if (pos)
                 return false;
             else
                 continue;
         }
-        else {
+        else 
+        {
             return false;
         }
     }
     return hasDigit;
+}
+
+bool IsValidInt(const char* text, bool pos) 
+{
+    bool hasDigit = false;
+    for (int i = 0; text[i] != '\0'; i++)
+    {
+        if (isdigit(text[i]))
+        {
+            hasDigit = true;
+        }
+        else if (i == 0 && text[i] == '-')
+        {
+            if (pos)
+                return false;
+            else
+                continue;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    return hasDigit;
+}
+
+Color MapToColor(float value, float minValue, float maxValue)
+{
+    if (std::isnan(value) || value < minValue || value > maxValue || minValue == maxValue)
+        return WHITE;
+
+    float normalized = (value - minValue) / (maxValue - minValue);
+
+    float r = std::clamp(1.5 - std::abs(4.0 * normalized - 3.0), 0.0, 1.0);
+    float g = std::clamp(1.5 - std::abs(4.0 * normalized - 2.0), 0.0, 1.0);
+    float b = std::clamp(1.5 - std::abs(4.0 * normalized - 1.0), 0.0, 1.0);
+
+    return Color{ (unsigned char)(255 * r), (unsigned char)(255 * g), (unsigned char)(255 * b), 255 };
 }

@@ -9,7 +9,7 @@ int main()
 
     while (!WindowShouldClose())
     {
-        // Define grid
+        // Define Model
 
         interface.RenderModel();
 
@@ -20,9 +20,10 @@ int main()
         auto solve_thread = std::jthread(&SolverStaggeredIMEXTemp::solve, &s, 100000);
 
         interface.RenderResults();
-        if (s.is_solving)
+        if (s.is_solving) // If it is still solving stop and post process
         {
             s.is_solving = false;
+            solve_thread.join();
             interface.RenderResults();
         }
     }

@@ -14,6 +14,7 @@ void Interface::SetData(SolverStaggeredIMEXTemp& solver)
     v_face_buffer = solver.v;
 
     needs_update = true;
+    is_solving = true;
 }
 
 void Interface::GetDataFromBuffer()

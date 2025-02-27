@@ -11,6 +11,7 @@
 #include "PhysicalField.hpp"
 #include "FlagField.hpp"
 #include "Interface.hpp"
+#include "BoundaryControl.hpp"
 
 class SolverStaggeredIMEXTemp
 {
@@ -31,8 +32,8 @@ public:
             for (int j = 0; j < ny; ++j) 
             {
                 divergence(i, j) = ((u(i + 1, j) - u(i, j)) * dy + 
-                                    (v(i, j + 1) - v(i, j)) * dx +
-                                    divergence_scr(i,j));
+                                    (v(i, j + 1) - v(i, j)) * dx -
+                                    p_scr(i,j));
             }
         }
     }
@@ -280,7 +281,7 @@ public:
                     v_scr(i, j) += coeff * value;
                 }
 
-                if (i != 0 && u_face_flags(i + 1, j, Flag::Open) && u_face_flags(i + 1, j - 1, Flag::Open) && v_face_flags(i + 1, j, Flag::Open))
+                if (i != 0 && u_face_flags(i, j, Flag::Open) && u_face_flags(i, j - 1, Flag::Open) && v_face_flags(i - 1, j, Flag::Open))
                 {
                     // Bottom: v diff
                     coeff = fluid.kinematic_viscosity / (dx * dx);
@@ -289,7 +290,7 @@ public:
                     v_scr(i, j) += coeff * value;
                 }
 
-                if (i != nx - 1 && u_face_flags(i, j, Flag::Open) && u_face_flags(i, j - 1, Flag::Open) && v_face_flags(i - 1, j, Flag::Open))
+                if (i != nx - 1 && u_face_flags(i + 1, j, Flag::Open) && u_face_flags(i + 1, j - 1, Flag::Open) && v_face_flags(i + 1, j, Flag::Open))
                 {
                     // Top: v diff
                     coeff = fluid.kinematic_viscosity/ (dx * dx);
@@ -409,7 +410,7 @@ public:
                 {
                     p_correction(i, j) = 0.0;
 
-                    double Ap = u_coeff(i, j) + u_coeff(i + 1, j) + v_coeff(i, j) + v_coeff(i, j + 1);
+                    double Ap = u_coeff(i, j) + u_coeff(i + 1, j) + v_coeff(i, j) + v_coeff(i, j + 1) + p_coef(i, j);
 
                     if (Ap == 0) { continue; }
 
@@ -466,7 +467,7 @@ public:
                 for (int j = 0; j < ny; ++j)
                 {
                     if (u_face_flags(i, j, Flag::Open))
-                        u(i, j) = (u(i, j) + dt * (u_scr(i, j) + (p(i - 1, j) - p(i, j)) / (dy * fluid.density))) / (1 + dt * u_coeff(i, j));
+                        u(i, j) = (u(i, j) + dt * (u_scr(i, j) + (p(i - 1, j) - p(i, j)) / (dx * fluid.density))) / (1 + dt * u_coeff(i, j));
                 }
             }
             for (int i = 0; i < nx; ++i)
@@ -474,7 +475,7 @@ public:
                 for (int j = 1; j < ny; ++j)
                 {
                     if (v_face_flags(i, j, Flag::Open))
-                        v(i, j) = (v(i, j) + dt * (v_scr(i, j) + (p(i, j - 1) - p(i, j)) / dx) / fluid.density) / (1 + dt * v_coeff(i, j));
+                        v(i, j) = (v(i, j) + dt * (v_scr(i, j) + (p(i, j - 1) - p(i, j)) / (dy * fluid.density))) / (1 + dt * v_coeff(i, j));
                 }
             }
         }
@@ -508,7 +509,8 @@ public:
             v_scr.reset();
             u_scr.reset();
             p_correction.reset();
-            divergence_scr.reset();
+            p_scr.reset();
+            p_coef.reset();
             u_coeff.reset();
             v_coeff.reset();
             t_scr.reset();
@@ -533,9 +535,9 @@ public:
 
             SolveVelocitiesForMomentumEquation();
 
-            ComputeDivergence();
-
             ApplyPressureBoundaryConditions();
+
+            ComputeDivergence();
 
             SolvePressure();
 
@@ -622,6 +624,9 @@ public:
     {
         for (auto& boundary : inlet_boundary_conditions)
             boundary.ApplyForTemperature(*this);
+
+        for (auto& boundary : open_boundary_condition)
+            boundary.ApplyForTemperature(*this);
     }
 
     void CorrectBoundaryCellVelocities()
@@ -636,11 +641,15 @@ public:
             boundary.CorrectBoundaryCellVelocities(*this);
     }
 
+    //////////////
+    // Settings //
+    //////////////
+
     struct FluidProperties
     {
         double density{ 1.0 };
         double kinematic_viscosity{ 0.01 };
-        double conductivity{ 0.01 };
+        double conductivity{ 0.1 };
         double cp{ 1000.0 };
     };
     FluidProperties fluid;
@@ -655,6 +664,10 @@ public:
     int innerTemperatureItterations{ 20 };
     double residualLimit{ 10e-5 };
 
+    /////////////////
+    // Solver Data //
+    /////////////////
+
     // Cell Props
 
     PhysicalField p{ nx, ny };
@@ -662,7 +675,8 @@ public:
     PhysicalField p_correction_old{ nx, ny };
 
     PhysicalField divergence{ nx, ny };
-    PhysicalField divergence_scr{ nx, ny };
+    PhysicalField p_scr{ nx, ny };
+    PhysicalField p_coef{ nx, ny };
 
     PhysicalField t{ nx, ny };
     PhysicalField t_scr{ nx, ny };
@@ -745,6 +759,7 @@ public:
                 if ((boundary.component_dir == 0 && boundary.i != nx) || (boundary.component_dir == 1 && boundary.j != ny))
                 {
                     auto& bc = open_boundary_condition.emplace_back(0, boundary.component_dir);
+                    bc.temperature = boundary.optional_temp;
                     bc.boundary_faces.push_back({ boundary.i, boundary.j });
                     u_face_flags.clearFlag(boundary.i, boundary.j, Flag::Open);
                 }
@@ -758,189 +773,6 @@ public:
             }
         }
     }
-
-    struct BoundaryCondition
-    {
-        BoundaryCondition(bool direction, bool component) : direction(direction), component(component) {}
-
-        bool direction; // 0 : +, 1 : -
-        bool component; // 0 : u, 1 : v
-        std::vector<std::pair<int, int>> boundary_faces;
-    };
-
-    struct FixedInletBoundaryCondition : public BoundaryCondition
-    {
-        FixedInletBoundaryCondition(bool direction, bool component) : BoundaryCondition(direction, component) {}
-
-        void ApplyForVelocity(SolverStaggeredIMEXTemp& solver)
-        {
-            int offset = direction == 0 ? 1 : -1;
-            int cell_offset = direction == 0 ? 0 : -1;
-            if (component == 0) // u
-            {
-                double flux = inlet_velocity * solver.dy;
-                double coeff = solver.fluid.density * flux / (solver.dx * solver.dy);
-                for (auto [i, j] : boundary_faces)
-                {
-                    //solver.u(i, j) = offset * inlet_velocity;
-                    solver.divergence_scr(i + cell_offset, j) -= inlet_velocity * solver.dy;
-                    solver.u_coeff(i + offset, j) += coeff;
-                    solver.u_scr(i + offset, j) += coeff * offset * inlet_velocity;
-                }
-            }
-            else // v
-            {
-                double flux = inlet_velocity * solver.dx;
-                double coeff = solver.fluid.density * flux / (solver.dx * solver.dy);
-                for (auto [i, j] : boundary_faces)
-                {
-                    //solver.v(i, j) = offset * inlet_velocity;
-                    solver.divergence_scr(i, j + cell_offset) -= inlet_velocity * solver.dx;
-                    solver.v_coeff(i, j + offset) += coeff;
-                    solver.v_scr(i, j + offset) += coeff * offset * inlet_velocity;
-                }
-            }
-        }
-
-        void ApplyForTemperature(SolverStaggeredIMEXTemp& solver)
-        {
-            int offset = direction == 0 ? 0 : -1;
-            if (component == 0) // u
-            {
-                double massflux = inlet_velocity * solver.fluid.density * solver.dy;
-                double coeff = massflux / (solver.dx * solver.dy);
-
-                for (auto [i, j] : boundary_faces)
-                {
-                    solver.t_coeff(i + offset, j) += coeff;
-                    solver.t_scr(i + offset, j) += coeff * inlet_temperature;
-                }
-            }
-            else // v
-            {
-                double massflux = inlet_velocity * solver.fluid.density * solver.dx;
-                double coeff = massflux / (solver.dx * solver.dy);
-
-                for (auto [i, j] : boundary_faces)
-                {
-                    solver.t_coeff(i, j + offset) += coeff;
-                    solver.t_scr(i, j + offset) += coeff * inlet_temperature;
-                }
-            }
-        }
-
-        void CorrectBoundaryCellVelocities(SolverStaggeredIMEXTemp& solver)
-        {
-            int offset = direction == 0 ? 1 : -1;
-            int cell_offset = direction == 0 ? 0 : -1;
-            if (component == 0) // u
-            {
-                for (auto [i, j] : boundary_faces)
-                {
-                    solver.cell_u(i + cell_offset, j) += offset * inlet_velocity / 2.0;
-                }
-            }
-            else // v
-            {
-                int cell_offset = direction == 0 ? 0 : -1;
-                for (auto [i, j] : boundary_faces)
-                {
-                    solver.cell_v(i, j + cell_offset) += offset * inlet_velocity / 2.0;
-                }
-            }
-        }
-
-        double inlet_temperature{};
-        double inlet_velocity{};
-    };
-
-    struct FixedOutletBoundaryCondition : public BoundaryCondition
-    {
-        FixedOutletBoundaryCondition(bool direction, bool component) : BoundaryCondition(direction, component) {}
-
-        void ApplyForVelocity(SolverStaggeredIMEXTemp& solver)
-        {
-            if (component == 0) // u
-            {
-                for (auto [i, j] : boundary_faces)
-                {
-                    int offset = direction == 0 ? -1 : 1;
-                    int cell_offset = direction == 0 ? 0 : -1;
-                    //solver.u(i, j) = offset * outlet_velocity;
-                    solver.divergence_scr(i + cell_offset, j) += outlet_velocity * solver.dy;
-                }
-            }
-            else // v
-            {
-                for (auto [i, j] : boundary_faces)
-                {
-                    int offset = direction == 0 ? -1 : 1;
-                    int cell_offset = direction == 0 ? 0 : -1;
-                    //solver.v(i, j) = offset * outlet_velocity;
-                    solver.divergence_scr(i, j + cell_offset) += outlet_velocity * solver.dx;
-                }
-            }
-        }
-        void CorrectBoundaryCellVelocities(SolverStaggeredIMEXTemp& solver)
-        {
-            int offset = direction == 0 ? -1 : 1;
-            int cell_offset = direction == 0 ? 0 : -1;
-            if (component == 0) // u
-            {
-                for (auto [i, j] : boundary_faces)
-                {
-                    solver.cell_u(i + cell_offset, j) += outlet_velocity / 2.0;
-                }
-            }
-            else // v
-            {
-                int cell_offset = direction == 0 ? 0 : -1;
-                for (auto [i, j] : boundary_faces)
-                {
-                    solver.cell_v(i, j + cell_offset) += offset * outlet_velocity / 2.0;
-                }
-            }
-
-        }
-        double outlet_velocity{};
-    };
-
-    struct OpenBoundaryCondition : public BoundaryCondition
-    {
-        OpenBoundaryCondition(bool direction, bool component) : BoundaryCondition(direction, component) {}
-
-        void ApplyForPressure(SolverStaggeredIMEXTemp& solver)
-        {
-            if (component == 0) // u
-            {
-                for (auto [i, j] : boundary_faces)
-                {
-                    int offset = direction == 0 ? 0 : -1;
-                    solver.divergence(i + offset, j) = 0.0;
-                }
-            }
-            else // v
-            {
-                for (auto [i, j] : boundary_faces)
-                {
-                    int offset = direction == 0 ? 0 : -1;
-                    solver.divergence(i, j + offset) = 0.0;
-                }
-            }
-        }
-
-        void CorrectBoundaryCellVelocities(SolverStaggeredIMEXTemp& solver)
-        {
-
-        }
-
-        double pressure{};
-    };
-
-    struct FrictionBoundaryCondition : public BoundaryCondition
-    { 
-
-    };
 
     std::vector<FixedInletBoundaryCondition> inlet_boundary_conditions;
     std::vector<FixedOutletBoundaryCondition> outlet_boundary_conditions;

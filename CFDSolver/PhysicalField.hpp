@@ -30,7 +30,7 @@ public:
 	}
 
 	friend Field operator+(const Field& lhs, const Field& rhs)
-	{\
+	{
 		Field tmp(lhs.nx, rhs.ny);
 		for (int i = 0; i < tmp.values.size(); ++i) { tmp.values[i] = lhs.values[i] + rhs.values[i]; }
 		return tmp;

@@ -6,6 +6,8 @@
 #include <unordered_set>
 #include <iostream>
 #include <algorithm>
+#include <random>
+
 #include "FairMutex.hpp"
 #include "Helper.hpp"
 
@@ -40,6 +42,7 @@ public:
         SetTraceLogLevel(LOG_ERROR);
         SetConfigFlags(FLAG_WINDOW_RESIZABLE);
         InitWindow(1000, 1000, "CFD Simulation Visualization");
+        SetWindowMinSize(1000, 1000);
         SetTargetFPS(60);
         ResetView();
     }
@@ -55,6 +58,8 @@ public:
     void RenderModel()
     {
         in_model_creator_mode = true;
+        is_solving = false;
+
         while (!WindowShouldClose() && in_model_creator_mode)
         {
             HandleInput();
@@ -63,69 +68,36 @@ public:
             ClearBackground(RAYWHITE);
 
             DrawGrid();
-            DrawPannel();
+            HandlePannel();
 
             EndDrawing();
         }
+
+        GenerateSpeedPoints();
     }
 
     void RenderResults()
     {
         in_render_mode = true;
-
-        double minTemp{ 0.0 };
-        double maxTemp{ 0.0 };
+        is_solving = false;
 
         while (!WindowShouldClose() && in_render_mode)
         {
             GetDataFromBuffer();
 
             // setup only needed if there is new data 
-            if (recalculate_auxiliary_data)
-            {
-                minPressure = *std::ranges::min_element(p.begin(), p.end());
-                maxPressure = *std::ranges::max_element(p.begin(), p.end());
-
-                maxVelocity = 0.0;
-                minVelocity = 0.0;
-
-                minTemp = *std::ranges::min_element(t.begin(), t.end());
-                maxTemp = *std::ranges::max_element(t.begin(), t.end());
-
-                double minDivergence = *std::ranges::min_element(divergence.begin(), divergence.end());
-                double maxDivergence = *std::ranges::max_element(divergence.begin(), divergence.end());
-
-                double minMaxDivergence = std::max(std::abs(minDivergence), std::abs(maxDivergence));
-
-                for (int j = 0; j < ny; ++j)
-                {
-                    for (int i = 0; i < nx; ++i)
-                    {
-                        float uVal = static_cast<float>(u(i, j));
-                        float vVal = static_cast<float>(v(i, j));
-
-                        // Calculate the magnitude and apply logarithmic scaling
-                        float magnitude = sqrt(uVal * uVal + vVal * vVal);
-                        if (magnitude > maxVelocity) maxVelocity = magnitude;
-                        if (magnitude < minVelocity) minVelocity = magnitude;
-                    }
-                }
-
-                //GenerateStreamlines(200, 200, 0.1);
-
-                recalculate_auxiliary_data = false;
-            }
+            if (recalculate_auxiliary_data) { SetAuxData(); }
 
             HandleInput();
 
             BeginDrawing();
             ClearBackground(RAYWHITE);
 
-            DrawField(t, minTemp, maxTemp);
+            if (enable_flags[2]) DrawField();
             DrawGrid();
-            DrawVelocityVectors();
-            //DrawStreamlines();
-            DrawPannel();
+            if (enable_flags[1]) DrawVelocityVectors();
+            if (enable_flags[0]) DrawStreamlines();
+            HandlePannel();
 
             EndDrawing();
         }
@@ -136,8 +108,9 @@ public:
 
     bool in_model_creator_mode{ false };
     bool in_render_mode{ false };
+    bool is_solving{ false };
 
-    // Model creator
+    // Model creator UI
     float key_hold_time[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
     bool text_box_edit_mode[3] = { false, false, false };
 
@@ -159,12 +132,30 @@ public:
     PhysicalField u_buffer, v_buffer, p_buffer, t_buffer, divergence_buffer, u_face_buffer, v_face_buffer;
     PhysicalField u, v, p, t, divergence, u_face, v_face;
     FairMutex mutex;
-
     float cellWidth{ 0 }, cellHeight{ 0 };
+    float minPressure{ 0.0 }, maxPressure{ 0.0 }, minTemp{ 0.0 }, maxTemp{ 0.0 }, minVelocity{ 0.0 }, maxVelocity{ 0.0 };
 
-    bool needs_update{ true };
-    bool recalculate_auxiliary_data{ false };
+    // Results UI
+    bool enable_flags[3] = { true, true, true };
 
+    char stremline_options[4][20] = { "num", "steps", "thickness", "reverse" };
+    bool stremline_option_editmode[3] = { false, false, false };
+    char stremline_option_inputs[3][32] = { "100", "100", "2" };
+    int streamline_num{ 100 }, streamline_steps{ 100 };
+    float streamline_thickness{ 2.0f };
+    bool reverse_streamlines{ false };
+
+    char v_arrow_options[20] = { "scale" };
+    bool v_arrow_editmode = { false };
+    char v_arrow_inputs[32] = { "1" };
+    float v_arrow_scale{ 1.0f };
+
+    char field_options[2][20] = { "Presure", "Temperature" };
+    bool plot_p_or_t{ false };
+    //bool plot_temperature_field{ true };
+    //char field_options[21] = "Pressure;Temperature";
+    //int field_combo_option;
+      
     // Render settings
     float offsetX{ 0 }, offsetY{ 0 }; // offset in the screen co-ords
     float zoom{ 1.0f };
@@ -172,8 +163,8 @@ public:
     float minZoomLevel{ 0.01f };
     float velocityScale{ 0.01f };
 
-    float minPressure{ 0.0 }, maxPressure{ 0.0 };
-    float minVelocity{ std::numeric_limits<float>::max() }, maxVelocity{ std::numeric_limits<float>::lowest() };
+    bool needs_update{ true };
+    bool recalculate_auxiliary_data{ false };
 
     void HandleInput()
     {
@@ -207,7 +198,7 @@ public:
 
         if (in_model_creator_mode)
         {
-            if (IsKeyPressed(KEY_S))
+            if (IsKeyPressed(KEY_ENTER))
             {
                 in_model_creator_mode = false;
                 selected_faces.clear();
@@ -239,12 +230,15 @@ public:
                 ny = std::min(200, ny + 1);
             }
 
-            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && IsMouseInView())
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
             {
                 if (!dragging)
                 {
-                    drag_start = mouse_pos;
-                    dragging = true;
+                    if (IsMouseInView())
+                    {
+                        drag_start = mouse_pos;
+                        dragging = true;
+                    }
                 }
                 else
                 {
@@ -278,7 +272,6 @@ public:
                 dragging = false;
             }
             
-
             // toggle blocked face
             if (IsKeyPressed(KEY_B))
             {
@@ -294,13 +287,13 @@ public:
         }
         else
         {
-            if (IsKeyPressed(KEY_S))
+            if (IsKeyPressed(KEY_ENTER))
                 in_render_mode = false;
 
             // Scale Velocity
-            if (IsKeyDown(KEY_A))
+            if (IsKeyDown(KEY_UP))
                 velocityScale *= 1.0f + zoom_sensitivity;
-            if (IsKeyDown(KEY_S))
+            if (IsKeyDown(KEY_DOWN))
                 velocityScale *= 1.0f / (1.0f + zoom_sensitivity);
         }
     }
@@ -370,7 +363,7 @@ public:
         }
     }
 
-    void DrawPannel()
+    void HandlePannel()
     {
         int x1 = GetViewScreenWidth(), x2 = GetScreenWidth(), y1 = 0.0f, y2 = GetScreenHeight();
         int width = x2 - x1;
@@ -379,11 +372,13 @@ public:
         DrawRectangleLinesEx(panel, 2, DARKGRAY);
 
         float current_y = y1 + 50;
+        int text_size = 20;
+        float local_size{ 0.0f };
 
         if (in_model_creator_mode)
         {
+            // Blocked and Clear buttons
             int xoffset = 30, xsize = 150, ysize = 60;
-
             GuiSetStyle(DEFAULT, TEXT_SIZE, 20);
             if (GuiButton(Rectangle(x1 + xoffset, current_y, xsize, ysize), "Blocked")) 
             {
@@ -507,10 +502,111 @@ public:
                 }
             }
         }
-        else
+        else if (in_render_mode)
         {
+            float x_total{ (float)width }, x_offset_outer{ 10.0f }, x_offset_inner{ 10.0f }, x_offset_block{ 200.0f }, x_rec_size = 60.0f, text_offset{ 5.0f };
+            float size = 30.0f;
+            float y_offset_outer{ 30.0f }, y_offset_inner{ 15.0f };
+            float bold{ 2.0f };
 
+            // Streamlines
+            local_size = 5 * y_offset_inner + 4 * size;
+            DrawRectangleLinesEx(Rectangle(x1 + x_offset_outer, current_y, x_total - 2 * x_offset_outer, local_size), bold, BLACK);
+            GuiCheckBox(Rectangle(x1 + x_offset_outer + x_offset_inner, current_y + local_size / 2 - size / 2, size, size), "Streamlines", &enable_flags[0]);
+            if (GuiTextBox(Rectangle(x1 + x_offset_block, current_y + y_offset_inner * 1 + size * 0, x_rec_size, size), stremline_option_inputs[0], 32, stremline_option_editmode[0]))
+            {
+                stremline_option_editmode[0] = !stremline_option_editmode[0];
+                if (!IsValidInt(stremline_option_inputs[0], true)) strcpy(stremline_option_inputs[0], "100");
+                int new_streamline_num = std::stoi(stremline_option_inputs[0]);
+                if (streamline_num != new_streamline_num) 
+                {
+                    streamline_num = new_streamline_num;
+                    GenerateSpeedPoints();
+                }
+            }
+            DrawText(stremline_options[0], x1 + x_offset_block + x_rec_size + text_offset, current_y + y_offset_inner * 1 + size * 0, text_size, BLACK);
+            if (GuiTextBox(Rectangle(x1 + x_offset_block, current_y + y_offset_inner * 2 + size * 1, x_rec_size, size), stremline_option_inputs[1], 32, stremline_option_editmode[1]))
+            {
+                stremline_option_editmode[1] = !stremline_option_editmode[1];
+                if (!IsValidInt(stremline_option_inputs[1], true)) strcpy(stremline_option_inputs[1], "100");
+                streamline_steps = std::stoi(stremline_option_inputs[1]);
+            }
+            DrawText(stremline_options[1], x1 + x_offset_block + x_rec_size + text_offset, current_y + y_offset_inner * 2 + size * 1, text_size, BLACK);
+            if (GuiTextBox(Rectangle(x1 + x_offset_block, current_y + y_offset_inner * 3 + size * 2, x_rec_size, size), stremline_option_inputs[2], 32, stremline_option_editmode[2]))
+            {
+                stremline_option_editmode[2] = !stremline_option_editmode[2];
+                if (!IsValidFloat(stremline_option_inputs[2], true)) strcpy(stremline_option_inputs[2], "2");
+                streamline_thickness = std::stof(stremline_option_inputs[2]);
+            }
+            DrawText(stremline_options[2], x1 + x_offset_block + x_rec_size + text_offset, current_y + y_offset_inner * 3 + size * 2, text_size, BLACK);
+            GuiCheckBox(Rectangle(x1 + x_offset_block + (x_rec_size - size) / 2, current_y + y_offset_inner * 4 + size * 3, size, size), stremline_options[3], &reverse_streamlines);
+            current_y += local_size + y_offset_outer;
+
+            // Cell velocity plot
+            local_size = 2 * y_offset_inner + size;
+            DrawRectangleLinesEx(Rectangle(x1 + x_offset_outer, current_y, x_total - 2 * x_offset_outer, local_size), bold, BLACK);
+            GuiCheckBox(Rectangle(x1 + x_offset_outer + x_offset_inner, current_y + local_size / 2 - size / 2, size, size), "Cell Velocity", &enable_flags[1]);
+            if (GuiTextBox(Rectangle(x1 + x_offset_block, current_y + y_offset_inner * 1 + size * 0, x_rec_size, size), v_arrow_inputs, 32, v_arrow_editmode))
+            {
+                v_arrow_editmode = !v_arrow_editmode;
+                if (!IsValidFloat(v_arrow_inputs, true)) strcpy(v_arrow_inputs, "1");
+                v_arrow_scale = std::stof(v_arrow_inputs);
+            }
+            current_y += local_size + y_offset_outer;
+
+            // Field result plot
+            local_size = 2 * y_offset_inner + 1 * size;
+            DrawRectangleLinesEx(Rectangle(x1 + x_offset_outer, current_y, x_total - 2 * x_offset_outer, local_size), bold, BLACK);
+            GuiCheckBox(Rectangle(x1 + x_offset_outer + x_offset_inner, current_y + local_size / 2 - size / 2, size, size), "Field Plot", &enable_flags[2]);
+            //if (GuiCheckBox(Rectangle(x1 + x_offset_block + (x_rec_size - size) / 2, current_y + y_offset_inner * 1 + size * 0, size, size), field_options[0], &plot_pressure_field)) { plot_temperature_field = false; }
+            //if (GuiCheckBox(Rectangle(x1 + x_offset_block + (x_rec_size - size) / 2, current_y + y_offset_inner * 2 + size * 1, size, size), field_options[1], &plot_temperature_field)) { plot_pressure_field = false; }
+            GuiToggle(Rectangle(x1 + x_offset_block, current_y + y_offset_inner * 1 + size * 0, x_rec_size * 2.5, size), field_options[plot_p_or_t], &plot_p_or_t);
+            current_y += local_size + y_offset_outer;
+
+            // TODO ledged plot
         }
+
+        int yoffset = 30, ysize = 50, xsize = 100;
+        if (GuiButton(Rectangle((width - xsize) / 2 + x1, y2 - yoffset - ysize, xsize, ysize), in_model_creator_mode ? "Start" : (is_solving ? "Stop" : "Rest")))
+        {
+            in_render_mode = in_model_creator_mode = false;
+            selected_faces.clear();
+        }
+    }
+
+    void SetAuxData()
+    {
+        minPressure = *std::ranges::min_element(p.begin(), p.end());
+        maxPressure = *std::ranges::max_element(p.begin(), p.end());
+
+        maxVelocity = std::numeric_limits<float>::min();
+        minVelocity = std::numeric_limits<float>::max();
+
+        minTemp = *std::ranges::min_element(t.begin(), t.end());
+        maxTemp = *std::ranges::max_element(t.begin(), t.end());
+
+        double minDivergence = *std::ranges::min_element(divergence.begin(), divergence.end());
+        double maxDivergence = *std::ranges::max_element(divergence.begin(), divergence.end());
+
+        double minMaxDivergence = std::max(std::abs(minDivergence), std::abs(maxDivergence));
+
+        for (int j = 0; j < ny; ++j)
+        {
+            for (int i = 0; i < nx; ++i)
+            {
+                float uVal = static_cast<float>(u(i, j));
+                float vVal = static_cast<float>(v(i, j));
+
+                // Calculate the magnitude and apply logarithmic scaling
+                float magnitude = sqrt(uVal * uVal + vVal * vVal);
+                if (magnitude > maxVelocity) maxVelocity = magnitude;
+                if (magnitude < minVelocity) minVelocity = magnitude;
+            }
+        }
+
+        GenerateStreamlines();
+
+        recalculate_auxiliary_data = false;
     }
 
     void DrawGrid()
@@ -581,7 +677,7 @@ public:
             DrawTriangleLines(arrowPoint1, arrowPoint2, arrowPoint3, BLACK);
         };
 
-        float scale = velocityScale * zoom;
+        float scale = velocityScale * zoom * v_arrow_scale;
 
         for (int j = 0; j < ny; ++j)
         {
@@ -604,18 +700,17 @@ public:
         }
     }
 
-    void DrawField(const PhysicalField& f, float minValue, float maxValue)
+    void DrawField()
     {
+        const PhysicalField& f = plot_p_or_t == 0 ? p : t;
+        const float minValue = plot_p_or_t == 0 ? minPressure : minTemp;
+        const float maxValue = plot_p_or_t == 0 ? maxPressure : maxTemp;
+
         for (int j = 0; j < ny; ++j)
         {
             for (int i = 0; i < nx; ++i)
             {
-                float value = f(i, j);
-
-                // Map the value to a color (heatmap)
-                Color color = MapToColor(value, minValue, maxValue);
-
-                // Draw a rectangle for each cell representing the value
+                Color color = MapToColor(f(i, j), minValue, maxValue);
                 float xPos = i * cellWidth + offsetX;
                 float yPos = j * cellHeight + offsetY;
                 DrawRectangleV({ xPos, yPos }, { cellWidth, cellHeight }, color);
@@ -629,12 +724,28 @@ public:
         std::vector<Vector2> points;
     };
     std::vector<Streamline> streamlines;
+    std::vector<std::pair<float, float>> seeds;
 
-    void GenerateStreamlines(int numSeeds, int steps, float stepSize)
+    void GenerateSpeedPoints()
+    {
+        seeds.clear();
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_real_distribution<float> dis(0.0f, 1.0f);
+        for (int seed = 0; seed < streamline_num; ++seed)
+        {
+            // Generate random seed points within the field
+            float x = dis(gen) * (float)nx;
+            float y = dis(gen) * (float)ny;
+            seeds.push_back({ x, y });
+        }
+    }
+
+    void GenerateStreamlines()
     {
         auto sampleVelocity = [&](float x, float y) -> Vector2
         {
-            if (x <= 0.5f || y <= 0.5f || x >= nx - 0.5f || y >= ny - 0.5f)
+            if (x <= 0.5f || y <= 0.5f || x >= (float)(nx) - 0.5f || y >= (float)(ny) - 0.5f)
                 return { 0.0f, 0.0f }; // Out of bounds
 
             x -= 0.5f;
@@ -662,18 +773,15 @@ public:
 
         streamlines.clear();
 
-        for (int seed = 0; seed < numSeeds; ++seed)
-        {
-            // Generate random seed points within the field
-            float x = GetRandomValue(0, nx);
-            float y = GetRandomValue(0, ny);
+        float stepSize = 0.05f;
 
-            bool reverse = GetRandomValue(0, 1) > 0.5f;
-            float sign = reverse ? -1.0f : 1.0f;
+        for (auto [x, y] : seeds)
+        {
+            float sign = reverse_streamlines ? -1.0f : 1.0f;
 
             Streamline streamline;
 
-            for (int step = 0; step < steps; ++step)
+            for (int step = 0; step < streamline_steps; ++step)
             {
                 Vector2 velocity = sampleVelocity(x, y);
 
@@ -698,7 +806,7 @@ public:
                 if (x <= 0 || y <= 0 || x >= nx || y >= ny)
                     break;
             }
-            streamline.is_reverse = reverse;
+            streamline.is_reverse = reverse_streamlines;
             streamlines.push_back(streamline);
         }
     }
@@ -712,9 +820,10 @@ public:
                 auto screenPoint = GridToScreenPos(streamline.points[i]);
                 auto otherScreenPoint = GridToScreenPos(streamline.points[i - 1]);
 
-                DrawLine(
-                    screenPoint.x, screenPoint.y,
-                    otherScreenPoint.x, otherScreenPoint.y,
+                DrawLineEx(
+                    { screenPoint.x, screenPoint.y },
+                    { otherScreenPoint.x, otherScreenPoint.y },
+                    2.0f,
                     BLACK
                 );
 
@@ -743,19 +852,5 @@ public:
                 //}
             }
         }
-    }
-
-    Color MapToColor(float value, float minValue, float maxValue)
-    {
-        if (std::isnan(value) || value < minValue || value > maxValue || minValue == maxValue)
-            return WHITE;
-
-        float normalized = (value - minValue) / (maxValue - minValue);
-
-        float r = std::clamp(1.5 - std::abs(4.0 * normalized - 3.0), 0.0, 1.0);
-        float g = std::clamp(1.5 - std::abs(4.0 * normalized - 2.0), 0.0, 1.0);
-        float b = std::clamp(1.5 - std::abs(4.0 * normalized - 1.0), 0.0, 1.0);
-
-        return Color{ (unsigned char)(255 * r), (unsigned char)(255 * g), (unsigned char)(255 * b), 255 };
     }
 };

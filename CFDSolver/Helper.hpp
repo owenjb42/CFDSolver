@@ -11,4 +11,8 @@ void DrawRectangleSafe(int x, int y, int width, int height, Color color);
 
 void DrawTriangleSafe(Vector2 p1, Vector2 p2, Vector2 p3, Color color);
 
-bool IsValidFloat(const char* text, bool pos);
+bool IsValidFloat(const char* text, bool pos = false);
+
+bool IsValidInt(const char* text, bool pos = false);
+
+Color MapToColor(float value, float minValue, float maxValue);
