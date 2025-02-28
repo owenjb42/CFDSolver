@@ -46,31 +46,3 @@ private:
     std::vector<uint32_t> values;  // Each element stores flag bits efficiently
     size_t nx, ny;
 };
-
-
-
-//class FlagField
-//{
-//public:
-//    //PhysicalField(int nx, int ny) : nx(nx), ny(ny) { values.resize(nx * ny); }
-//
-//    inline const int& operator() (int i, int j) const { return values[i + nx * j]; }
-//    inline int& operator() (int i, int j) { return values[i + nx * j]; }
-//
-//    std::vector<int>::iterator begin() { return values.begin(); }
-//    std::vector<int>::iterator end() { return values.end(); }
-//
-//    void reset()
-//    {
-//        for (auto& value : values) value = 0.0;
-//    }
-//
-//private:
-//    int nx, ny;
-//    std::vector<int> values;
-//};
-//
-//enum class Flags
-//{
-//    H
-//};

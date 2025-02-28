@@ -773,7 +773,7 @@ public:
 
         streamlines.clear();
 
-        float stepSize = 0.05f;
+        float stepSize = 0.1f;
 
         for (auto [x, y] : seeds)
         {
@@ -823,7 +823,7 @@ public:
                 DrawLineEx(
                     { screenPoint.x, screenPoint.y },
                     { otherScreenPoint.x, otherScreenPoint.y },
-                    2.0f,
+                    streamline_thickness,
                     BLACK
                 );
 

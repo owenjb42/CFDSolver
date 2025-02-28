@@ -38,7 +38,6 @@ struct OpenBoundaryCondition : public BoundaryCondition
 {
     OpenBoundaryCondition(bool direction, bool component) : BoundaryCondition(direction, component) {}
 
-    void ApplyForVelocity(SolverStaggeredIMEXTemp& solver);
     void ApplyForPressure(SolverStaggeredIMEXTemp& solver);
     void ApplyForTemperature(SolverStaggeredIMEXTemp& solver);
     void CorrectBoundaryCellVelocities(SolverStaggeredIMEXTemp& solver);

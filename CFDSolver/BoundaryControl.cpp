@@ -114,7 +114,7 @@ void FixedOutletBoundaryCondition::CorrectBoundaryCellVelocities(SolverStaggered
     {
         for (auto [i, j] : boundary_faces)
         {
-            solver.cell_u(i + cell_offset, j) += outlet_velocity / 2.0;
+            solver.cell_u(i + cell_offset, j) += offset * outlet_velocity / 2.0;
         }
     }
     else // v
@@ -125,7 +125,6 @@ void FixedOutletBoundaryCondition::CorrectBoundaryCellVelocities(SolverStaggered
             solver.cell_v(i, j + cell_offset) += offset * outlet_velocity / 2.0;
         }
     }
-
 }
 
 ///////////////////
@@ -133,7 +132,7 @@ void FixedOutletBoundaryCondition::CorrectBoundaryCellVelocities(SolverStaggered
 ///////////////////
 void OpenBoundaryCondition::ApplyForPressure(SolverStaggeredIMEXTemp& solver)
 {
-    double coef = 0.1;
+    double fix_coef = 1.0;// 1000.0;
 
     int offset = direction == 0 ? 1 : -1;
     int cell_offset = direction == 0 ? 0 : -1;
@@ -141,20 +140,22 @@ void OpenBoundaryCondition::ApplyForPressure(SolverStaggeredIMEXTemp& solver)
     {
         for (auto [i, j] : boundary_faces)
         {
+            double coeff = solver.dy;
             double dp = (pressure - solver.p(i + cell_offset, j));
-            double u_b = /*solver.u(i + offset, j);*/ dp / solver.fluid.density;
-            solver.p_scr(i + cell_offset, j) += coef * u_b;
-            solver.p_coef(i + cell_offset, j) += coef * solver.dy;
+            double u_b = -dp / solver.fluid.density;
+            solver.p_scr(i + cell_offset, j) += coeff * u_b;
+            solver.p_coef(i + cell_offset, j) += coeff * fix_coef;
         }
     }
     else // v
     {
         for (auto [i, j] : boundary_faces)
         {
+            double coeff = solver.dx;
             double dp = (pressure - solver.p(i, j + cell_offset));
-            double u_b = /*solver.u(i, j + offset);*/ dp / solver.fluid.density;
-            solver.p_scr(i, j + cell_offset) += coef * u_b;
-            solver.p_coef(i, j + cell_offset) += coef * solver.dx;
+            double u_b = -dp / solver.fluid.density;
+            solver.p_scr(i, j + cell_offset) += coeff * u_b;
+            solver.p_coef(i, j + cell_offset) += coeff * fix_coef;
         }
     }
 }
@@ -167,9 +168,12 @@ void OpenBoundaryCondition::ApplyForTemperature(SolverStaggeredIMEXTemp& solver)
         for (auto [i, j] : boundary_faces)
         {
             double massflux = (pressure - solver.p(i + cell_offset, j)) * solver.dy;
-            double coeff = massflux / (solver.dx * solver.dy);
-            solver.t_coeff(i + offset, j) += coeff;
-            solver.t_scr(i + offset, j) += coeff * temperature;
+            if (massflux > 0.0)
+            {
+                double coeff = massflux / (solver.dx * solver.dy);
+                solver.t_coeff(i + offset, j) += coeff;
+                solver.t_scr(i + offset, j) += coeff * temperature;
+            }
         }
     }
     else // v
@@ -177,13 +181,35 @@ void OpenBoundaryCondition::ApplyForTemperature(SolverStaggeredIMEXTemp& solver)
         for (auto [i, j] : boundary_faces)
         {
             double massflux = (pressure - solver.p(i, j + cell_offset)) * solver.dx;
-            double coeff = massflux / (solver.dx * solver.dy);
-            solver.t_coeff(i, j + offset) += coeff;
-            solver.t_scr(i, j + offset) += coeff * temperature;
+            if (massflux > 0.0)
+            {
+                double coeff = massflux / (solver.dx * solver.dy);
+                solver.t_coeff(i, j + offset) += coeff;
+                solver.t_scr(i, j + offset) += coeff * temperature;
+            }
         }
     }
 }
 void OpenBoundaryCondition::CorrectBoundaryCellVelocities(SolverStaggeredIMEXTemp& solver)
 {
-
+    int offset = direction == 0 ? 1 : -1;
+    int cell_offset = direction == 0 ? 0 : -1;
+    if (component == 0) // u
+    {
+        for (auto [i, j] : boundary_faces)
+        {
+            double dp = (pressure - solver.p(i + cell_offset, j));
+            double u_b = dp / solver.fluid.density;
+            solver.cell_u(i + cell_offset, j) += offset * u_b / 2.0;
+        }
+    }
+    else // v
+    {
+        for (auto [i, j] : boundary_faces)
+        {
+            double dp = (pressure - solver.p(i, j + cell_offset));
+            double u_b = dp / solver.fluid.density;
+            solver.cell_v(i, j + cell_offset) += offset * u_b / 2.0;
+        }
+    }
 }

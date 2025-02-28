@@ -32,7 +32,7 @@ public:
             for (int j = 0; j < ny; ++j) 
             {
                 divergence(i, j) = ((u(i + 1, j) - u(i, j)) * dy + 
-                                    (v(i, j + 1) - v(i, j)) * dx -
+                                    (v(i, j + 1) - v(i, j)) * dx +
                                     p_scr(i,j));
             }
         }
@@ -575,43 +575,80 @@ public:
         for (auto& boundary : outlet_boundary_conditions)
             boundary.ApplyForVelocity(*this);
 
-        // Friction - ToDo apply from each blocked face take half for completeness - TODO blocked faces
-        double coeff = fluid.kinematic_viscosity / (dy / 2);
-        for (int i = 1; i < nx; ++i)
+        double wall_velocity = 0.0;
+        double coeff = 0.5 * fluid.kinematic_viscosity / (dy / 2);
+        for (int i = 0; i < nx + 1; ++i)
         {
-            // Top boundary
-            u_coeff(i, 0) += coeff;
-            u_scr(i, 0) += 0.0 * coeff;
-        
-            // Bottom boundary
-            u_coeff(i, ny - 1) += coeff;
-            u_scr(i, ny - 1) += 0.0 * coeff;
+            for (int j = 0; j < ny; ++j)
+            {
+                if (!u_face_flags(i, j, Flag::Open))
+                {
+                    if (i != 0)
+                    {
+                        if (v_face_flags(i - 1, j + 1, Flag::Open)) // Top Left
+                        { 
+                            v_coeff(i - 1, j + 1) += coeff;
+                            v_scr(i - 1, j + 1) += wall_velocity * coeff;
+                        }
+                        if (v_face_flags(i - 1, j, Flag::Open)) // Bottom Left
+                        {
+                            v_coeff(i - 1, j) += coeff;
+                            v_scr(i - 1, j) += wall_velocity * coeff;
+                        }
+                    }
+                    if (i != nx)
+                    {
+                        if (v_face_flags(i, j + 1, Flag::Open)) // Top Right
+                        {
+                            v_coeff(i, j + 1) += coeff;
+                            v_scr(i, j + 1) += wall_velocity * coeff;
+                        }
+                        if (v_face_flags(i, j, Flag::Open)) // Bottom Right
+                        {
+                            v_coeff(i, j) += coeff;
+                            v_scr(i, j) += wall_velocity * coeff;
+                        }
+                    }
+                }
+            }
         }
-        coeff = fluid.kinematic_viscosity / (dx / 2);
-        for (int j = 1; j < ny; ++j)
+        coeff = 0.5 * fluid.kinematic_viscosity / (dx / 2);
+        for (int i = 0; i < nx; ++i)
         {
-            // Left boundary
-            v_coeff(0, j) += coeff;
-            v_scr(0, j) += 0.0 * coeff;
-        
-            // Right boundary
-            v_coeff(nx - 1, j) += coeff;
-            v_scr(nx - 1, j) += 0.0 * coeff;
+            for (int j = 0; j < ny + 1; ++j)
+            {
+                if (!v_face_flags(i, j, Flag::Open))
+                {
+                    if (j != 0)
+                    {
+                        if (u_face_flags(i, j - 1, Flag::Open)) // Bottom Left
+                        {
+                            u_coeff(i, j - 1) += coeff;
+                            u_scr(i, j - 1) += wall_velocity * coeff;
+                            if (u_face_flags(i + 1, j - 1, Flag::Open)) // Bottom Right
+                            {
+                                u_coeff(i + 1, j - 1) += coeff;
+                                u_scr(i + 1, j - 1) += wall_velocity * coeff;
+                            }
+                        }
+                    }
+                    if (j != ny)
+                    {
+                        if (u_face_flags(i, j, Flag::Open)) // Top Left
+                        {
+                            u_coeff(i, j) += coeff;
+                            u_scr(i, j) += wall_velocity * coeff;
+                        }
+                        if (u_face_flags(i + 1, j, Flag::Open)) // Top Right
+                        {
+                            u_coeff(i + 1, j) += coeff;
+                            u_scr(i + 1, j) += wall_velocity * coeff;
+                        }
+                        
+                    }
+                }
+            }
         }
-
-        //for (int i = 1; i < nx; ++i)
-        //{
-        //    for (int j = 0; j < ny; ++j)
-        //    {
-        //    }
-        //}
-        //
-        //for (int i = 0; i < nx; ++i)
-        //{
-        //    for (int j = 1; j < ny; ++j)
-        //    {
-        //    }
-        //}
     }
 
     void ApplyPressureBoundaryConditions()
@@ -662,7 +699,7 @@ public:
     int innerPressureItterations{ 40 };
     int innerVelocityItterations{ 2 };
     int innerTemperatureItterations{ 20 };
-    double residualLimit{ 10e-5 };
+    double residualLimit{ 10e-7 };
 
     /////////////////
     // Solver Data //
@@ -761,14 +798,13 @@ public:
                     auto& bc = open_boundary_condition.emplace_back(0, boundary.component_dir);
                     bc.temperature = boundary.optional_temp;
                     bc.boundary_faces.push_back({ boundary.i, boundary.j });
-                    u_face_flags.clearFlag(boundary.i, boundary.j, Flag::Open);
+                    boundary.component_dir == 0 ? u_face_flags.clearFlag(boundary.i, boundary.j, Flag::Open) : v_face_flags.clearFlag(boundary.i, boundary.j, Flag::Open);
                 }
-
                 if ((boundary.component_dir == 0 && boundary.i != 0) || (boundary.component_dir == 1 && boundary.j != 0))
                 {
                     auto& bc = open_boundary_condition.emplace_back(1, boundary.component_dir);
                     bc.boundary_faces.push_back({ boundary.i, boundary.j });
-                    v_face_flags.clearFlag(boundary.i, boundary.j, Flag::Open);
+                    boundary.component_dir == 0 ? u_face_flags.clearFlag(boundary.i, boundary.j, Flag::Open) : v_face_flags.clearFlag(boundary.i, boundary.j, Flag::Open);
                 }
             }
         }
