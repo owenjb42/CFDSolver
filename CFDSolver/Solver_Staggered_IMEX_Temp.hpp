@@ -797,12 +797,15 @@ public:
                 {
                     auto& bc = open_boundary_condition.emplace_back(0, boundary.component_dir);
                     bc.temperature = boundary.optional_temp;
+                    bc.pressure = boundary.optional_pressure;
                     bc.boundary_faces.push_back({ boundary.i, boundary.j });
                     boundary.component_dir == 0 ? u_face_flags.clearFlag(boundary.i, boundary.j, Flag::Open) : v_face_flags.clearFlag(boundary.i, boundary.j, Flag::Open);
                 }
                 if ((boundary.component_dir == 0 && boundary.i != 0) || (boundary.component_dir == 1 && boundary.j != 0))
                 {
                     auto& bc = open_boundary_condition.emplace_back(1, boundary.component_dir);
+                    bc.temperature = boundary.optional_temp;
+                    bc.pressure = boundary.optional_pressure;
                     bc.boundary_faces.push_back({ boundary.i, boundary.j });
                     boundary.component_dir == 0 ? u_face_flags.clearFlag(boundary.i, boundary.j, Flag::Open) : v_face_flags.clearFlag(boundary.i, boundary.j, Flag::Open);
                 }
