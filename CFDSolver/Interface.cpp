@@ -13,6 +13,10 @@ void Interface::SetData(SolverStaggeredIMEXTemp& solver)
     u_face_buffer = solver.u;
     v_face_buffer = solver.v;
 
+    residual_values_buffer[0] = solver.maxPressureResidual;
+    residual_values_buffer[1] = solver.maxDivergence;
+    residual_values_buffer[2] = solver.maxTemperatureResidual;
+
     needs_update = true;
     is_solving = true;
 }
@@ -29,6 +33,10 @@ void Interface::GetDataFromBuffer()
         divergence = divergence_buffer;
         u_face = u_face_buffer;
         v_face = v_face_buffer;
+
+        std::sprintf(residual_values[0], "%.1e", residual_values_buffer[0]);
+        std::sprintf(residual_values[1], "%.1e", residual_values_buffer[1]);
+        std::sprintf(residual_values[2], "%.1e", residual_values_buffer[2]);
 
         needs_update = false;
         recalculate_auxiliary_data = true;
@@ -194,7 +202,7 @@ void Interface::HandlePannel()
     {
         float x_total{ (float)width }, x_offset_outer{ 10.0f }, x_offset_inner{ 10.0f }, x_offset_block{ 200.0f }, x_rec_size = 60.0f, text_offset{ 5.0f };
         float size = 30.0f;
-        float y_offset_outer{ 30.0f }, y_offset_inner{ 15.0f };
+        float y_offset_outer{ 30.0f }, y_offset_inner{ 15.0f }, y_legend_size{ 300.0f };
         float bold{ 2.0f };
 
         // Streamlines
@@ -254,9 +262,47 @@ void Interface::HandlePannel()
         DrawRectangleLinesEx(Rectangle(x1 + x_offset_outer, current_y, x_total - 2 * x_offset_outer, local_size), bold, BLACK);
         GuiCheckBox(Rectangle(x1 + x_offset_outer + x_offset_inner, current_y + local_size / 2 - size / 2, size, size), "Field Plot", &enable_flags[2]);
         GuiToggle(Rectangle(x1 + x_offset_block, current_y + y_offset_inner * 1 + size * 0, x_rec_size * 2.5, size), field_options[plot_p_or_t], &plot_p_or_t);
-        current_y += local_size + y_offset_outer;
+        current_y += local_size + y_offset_outer * 2;
 
-        // TODO ledged plot
+        // Ledged Plot
+        if (enable_flags[1] && enable_flags[2])
+        {
+            DrawLegend(plot_p_or_t ? "Temperature" : "Presssure", x1 + x_offset_outer + x_offset_inner * 4, current_y, x_rec_size * 1.5, y_legend_size, plot_p_or_t ? minTemp : minPressure, plot_p_or_t ? maxTemp : maxPressure);
+            DrawLegend("Velocity", x2 - x_offset_outer - x_offset_inner * 5 - x_rec_size * 1.5, current_y, x_rec_size * 1.5, y_legend_size, minVelocity, maxVelocity);
+        }
+        else if (enable_flags[2])
+        {
+            DrawLegend(plot_p_or_t ? "Temperature" : "Presssure", x1 + x_total / 2 - x_rec_size * 0.75, current_y, x_rec_size * 1.5, y_legend_size, plot_p_or_t ? minTemp : minPressure, plot_p_or_t ? maxTemp : maxPressure);
+        }
+        else if (enable_flags[1])
+        {
+            DrawLegend("Velocity", x1 + x_total / 2 - x_rec_size * 0.75, current_y, x_rec_size * 1.5, y_legend_size, minVelocity, maxVelocity);
+        }
+        current_y += y_legend_size + y_offset_outer * 2;
+
+        // Residuals
+        const char* title = "Residuals";
+        float title_x = x1 + (x_total - MeasureText(title, text_size)) / 2;
+        float title_y = current_y - text_size - 10;
+        DrawText(title, title_x, title_y, text_size, BLACK);
+        float title_width = MeasureText(title, text_size);
+        DrawLine(title_x, title_y + text_size + 2, title_x + title_width, title_y + text_size + 2, BLACK);
+        current_y += y_offset_outer;
+
+        float box_x_size = (x_total - x_offset_outer * 4) / 3;
+        for (int i = 0; i < 3; ++i) 
+        {
+            float box_x = x1 + x_offset_outer * (i + 1) + box_x_size * i;
+            DrawRectangleLinesEx(Rectangle(box_x, current_y, box_x_size, size), bold, BLACK);
+
+            float text_x = box_x + box_x_size / 2 - MeasureText(residuals[i], text_size) / 2;
+            float text_y = current_y - text_size - 5;
+            DrawText(residuals[i], text_x, text_y, text_size, BLACK);
+
+            float value_x = box_x + box_x_size / 2 - MeasureText(residual_values[i], text_size) / 2;
+            float value_y = current_y + (size - text_size) / 2;
+            DrawText(residual_values[i], value_x, value_y, text_size, BLACK);
+        }
     }
 
     int yoffset = 30, ysize = 50, xsize = 100;

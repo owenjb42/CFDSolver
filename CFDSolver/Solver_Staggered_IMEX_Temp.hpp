@@ -496,7 +496,9 @@ public:
         }
     }
 
-    // Main time stepping method
+    ///////////////////////////////
+    // Main time stepping method //
+    ///////////////////////////////
     void solve(int num_iterations) 
     {
         is_solving = true;
@@ -547,12 +549,12 @@ public:
             if (iter % 10 == 0)
             {
                 residual = p_correction / p;
-                double maxPressureResidual = relaxation * (std::max(std::abs(*std::max_element(residual.begin(), residual.end())), std::abs(*std::min_element(residual.begin(), residual.end()))));
+                maxPressureResidual = relaxation * (std::max(std::abs(*std::max_element(residual.begin(), residual.end())), std::abs(*std::min_element(residual.begin(), residual.end()))));
 
                 residual = (t - t_previous) / t;
-                double maxTemperatureResidual = std::max(std::abs(*std::max_element(residual.begin(), residual.end())), std::abs(*std::min_element(residual.begin(), residual.end())));
+                maxTemperatureResidual = std::max(std::abs(*std::max_element(residual.begin(), residual.end())), std::abs(*std::min_element(residual.begin(), residual.end())));
 
-                double maxDivergence = std::max(std::abs(*std::ranges::min_element(divergence.begin(), divergence.end())), std::abs(*std::ranges::max_element(divergence.begin(), divergence.end())));
+                maxDivergence = std::max(std::abs(*std::ranges::min_element(divergence.begin(), divergence.end())), std::abs(*std::ranges::max_element(divergence.begin(), divergence.end())));
 
                 printf("\rIteration: %d | Pressure Residual: %.3e | Max Abs Divergence %.3e | Temperature Residual: %.3e   ", iter, maxPressureResidual, maxDivergence, maxTemperatureResidual);
 
@@ -567,6 +569,10 @@ public:
         is_solving = false;
     }
 
+    ////////////////
+    // Boundaries //
+    ////////////////
+
     void ApplyVelocityBoundaryConditions() 
     {
         for (auto& boundary : inlet_boundary_conditions)
@@ -575,85 +581,12 @@ public:
         for (auto& boundary : outlet_boundary_conditions)
             boundary.ApplyForVelocity(*this);
 
-        double wall_velocity = 0.0;
-        double coeff = 0.5 * fluid.kinematic_viscosity / (dy / 2);
-        for (int i = 0; i < nx + 1; ++i)
-        {
-            for (int j = 0; j < ny; ++j)
-            {
-                if (!u_face_flags(i, j, Flag::Open))
-                {
-                    if (i != 0)
-                    {
-                        if (v_face_flags(i - 1, j + 1, Flag::Open)) // Top Left
-                        { 
-                            v_coeff(i - 1, j + 1) += coeff;
-                            v_scr(i - 1, j + 1) += wall_velocity * coeff;
-                        }
-                        if (v_face_flags(i - 1, j, Flag::Open)) // Bottom Left
-                        {
-                            v_coeff(i - 1, j) += coeff;
-                            v_scr(i - 1, j) += wall_velocity * coeff;
-                        }
-                    }
-                    if (i != nx)
-                    {
-                        if (v_face_flags(i, j + 1, Flag::Open)) // Top Right
-                        {
-                            v_coeff(i, j + 1) += coeff;
-                            v_scr(i, j + 1) += wall_velocity * coeff;
-                        }
-                        if (v_face_flags(i, j, Flag::Open)) // Bottom Right
-                        {
-                            v_coeff(i, j) += coeff;
-                            v_scr(i, j) += wall_velocity * coeff;
-                        }
-                    }
-                }
-            }
-        }
-        coeff = 0.5 * fluid.kinematic_viscosity / (dx / 2);
-        for (int i = 0; i < nx; ++i)
-        {
-            for (int j = 0; j < ny + 1; ++j)
-            {
-                if (!v_face_flags(i, j, Flag::Open))
-                {
-                    if (j != 0)
-                    {
-                        if (u_face_flags(i, j - 1, Flag::Open)) // Bottom Left
-                        {
-                            u_coeff(i, j - 1) += coeff;
-                            u_scr(i, j - 1) += wall_velocity * coeff;
-                            if (u_face_flags(i + 1, j - 1, Flag::Open)) // Bottom Right
-                            {
-                                u_coeff(i + 1, j - 1) += coeff;
-                                u_scr(i + 1, j - 1) += wall_velocity * coeff;
-                            }
-                        }
-                    }
-                    if (j != ny)
-                    {
-                        if (u_face_flags(i, j, Flag::Open)) // Top Left
-                        {
-                            u_coeff(i, j) += coeff;
-                            u_scr(i, j) += wall_velocity * coeff;
-                        }
-                        if (u_face_flags(i + 1, j, Flag::Open)) // Top Right
-                        {
-                            u_coeff(i + 1, j) += coeff;
-                            u_scr(i + 1, j) += wall_velocity * coeff;
-                        }
-                        
-                    }
-                }
-            }
-        }
+        friction_boundary_condition.ApplyFriction(*this);
     }
 
     void ApplyPressureBoundaryConditions()
     {
-        for (auto& boundary : open_boundary_condition)
+        for (auto& boundary : open_boundary_conditions)
             boundary.ApplyForPressure(*this);
     }
 
@@ -662,7 +595,7 @@ public:
         for (auto& boundary : inlet_boundary_conditions)
             boundary.ApplyForTemperature(*this);
 
-        for (auto& boundary : open_boundary_condition)
+        for (auto& boundary : open_boundary_conditions)
             boundary.ApplyForTemperature(*this);
     }
 
@@ -674,77 +607,9 @@ public:
         for (auto& boundary : outlet_boundary_conditions)
             boundary.CorrectBoundaryCellVelocities(*this);
 
-        for (auto& boundary : open_boundary_condition)
+        for (auto& boundary : open_boundary_conditions)
             boundary.CorrectBoundaryCellVelocities(*this);
     }
-
-    //////////////
-    // Settings //
-    //////////////
-
-    struct FluidProperties
-    {
-        double density{ 1.0 };
-        double kinematic_viscosity{ 0.01 };
-        double conductivity{ 0.1 };
-        double cp{ 1000.0 };
-    };
-    FluidProperties fluid;
-
-    int nx, ny;
-    double dx, dy;
-    double dt{ 10e-3 };
-    double relaxation{ 0.5 };
-
-    int innerPressureItterations{ 40 };
-    int innerVelocityItterations{ 2 };
-    int innerTemperatureItterations{ 20 };
-    double residualLimit{ 10e-7 };
-
-    /////////////////
-    // Solver Data //
-    /////////////////
-
-    // Cell Props
-
-    PhysicalField p{ nx, ny };
-    PhysicalField p_correction{ nx, ny };
-    PhysicalField p_correction_old{ nx, ny };
-
-    PhysicalField divergence{ nx, ny };
-    PhysicalField p_scr{ nx, ny };
-    PhysicalField p_coef{ nx, ny };
-
-    PhysicalField t{ nx, ny };
-    PhysicalField t_scr{ nx, ny };
-    PhysicalField t_coeff{ nx, ny };
-
-    PhysicalField residual{ nx, ny };
-    PhysicalField t_previous{ nx, ny };
-
-    // Face Props (staggered grid)
-
-    PhysicalField u{ nx + 1, ny }, v{ nx, ny + 1 };
-
-    PhysicalField u_scr{ nx + 1, ny }; 
-    PhysicalField v_scr{ nx, ny + 1 };
-
-    PhysicalField u_coeff{ nx + 1, ny };
-    PhysicalField v_coeff{ nx, ny + 1 };
-
-    FairMutex cell_data_mutex;
-
-    PhysicalField cell_u{ nx, ny };
-    PhysicalField cell_v{ nx, ny };
-
-    // Face Flags (staggered grid): 1 - blocked, 2 - friction
-
-    FlagField u_face_flags{ nx + 1, ny }; 
-    FlagField v_face_flags{ nx, ny + 1 }; 
-
-    ////////////////
-    // Boundaries //
-    ////////////////
 
     void SetBlockedFaces(Interface& interface)
     {
@@ -795,7 +660,7 @@ public:
             {
                 if ((boundary.component_dir == 0 && boundary.i != nx) || (boundary.component_dir == 1 && boundary.j != ny))
                 {
-                    auto& bc = open_boundary_condition.emplace_back(0, boundary.component_dir);
+                    auto& bc = open_boundary_conditions.emplace_back(0, boundary.component_dir);
                     bc.temperature = boundary.optional_temp;
                     bc.pressure = boundary.optional_pressure;
                     bc.boundary_faces.push_back({ boundary.i, boundary.j });
@@ -803,7 +668,7 @@ public:
                 }
                 if ((boundary.component_dir == 0 && boundary.i != 0) || (boundary.component_dir == 1 && boundary.j != 0))
                 {
-                    auto& bc = open_boundary_condition.emplace_back(1, boundary.component_dir);
+                    auto& bc = open_boundary_conditions.emplace_back(1, boundary.component_dir);
                     bc.temperature = boundary.optional_temp;
                     bc.pressure = boundary.optional_pressure;
                     bc.boundary_faces.push_back({ boundary.i, boundary.j });
@@ -815,8 +680,76 @@ public:
 
     std::vector<FixedInletBoundaryCondition> inlet_boundary_conditions;
     std::vector<FixedOutletBoundaryCondition> outlet_boundary_conditions;
-    std::vector<OpenBoundaryCondition> open_boundary_condition;
-    std::vector<FrictionBoundaryCondition> friction_boundary_condition;
+    std::vector<OpenBoundaryCondition> open_boundary_conditions;
+    FrictionBoundaryCondition friction_boundary_condition;
+
+    //////////////
+    // Settings //
+    //////////////
+
+    struct FluidProperties
+    {
+        double density{ 1.0 };
+        double kinematic_viscosity{ 0.01 };
+        double conductivity{ 0.1 };
+        double cp{ 1000.0 };
+    };
+    FluidProperties fluid;
+
+    int nx, ny;
+    double dx, dy;
+    double dt{ 10e-3 };
+    double relaxation{ 0.5 };
+
+    int innerPressureItterations{ 40 };
+    int innerVelocityItterations{ 2 };
+    int innerTemperatureItterations{ 20 };
+    double residualLimit{ 10e-7 };
+
+    double maxPressureResidual{ 0.0 }, maxDivergence{ 0.0 }, maxTemperatureResidual{ 0.0 };
+
+    /////////////////
+    // Solver Data //
+    /////////////////
+
+    // Cell Props
+
+    PhysicalField p{ nx, ny };
+    PhysicalField p_correction{ nx, ny };
+    PhysicalField p_correction_old{ nx, ny };
+
+    PhysicalField divergence{ nx, ny };
+    PhysicalField p_scr{ nx, ny };
+    PhysicalField p_coef{ nx, ny };
+
+    PhysicalField t{ nx, ny };
+    PhysicalField t_scr{ nx, ny };
+    PhysicalField t_coeff{ nx, ny };
+
+    PhysicalField residual{ nx, ny };
+    PhysicalField t_previous{ nx, ny };
+
+    // Face Props (staggered grid)
+
+    PhysicalField u{ nx + 1, ny }, v{ nx, ny + 1 };
+
+    PhysicalField u_scr{ nx + 1, ny };
+    PhysicalField v_scr{ nx, ny + 1 };
+
+    PhysicalField u_coeff{ nx + 1, ny };
+    PhysicalField v_coeff{ nx, ny + 1 };
+
+    FairMutex cell_data_mutex;
+
+    PhysicalField cell_u{ nx, ny };
+    PhysicalField cell_v{ nx, ny };
+
+    // Face Flags (staggered grid): 1 - blocked, 2 - friction
+
+    FlagField u_face_flags{ nx + 1, ny };
+    FlagField v_face_flags{ nx, ny + 1 };
+
+
 
     // TODO
     // - blocked cells / solid cells

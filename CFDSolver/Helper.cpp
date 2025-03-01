@@ -166,3 +166,31 @@ Color MapToColor(float value, float minValue, float maxValue)
 
     return Color{ (unsigned char)(255 * r), (unsigned char)(255 * g), (unsigned char)(255 * b), 255 };
 }
+
+void DrawLegend(const char* text, float x1, float y1, float xsize, float ysize, float minValue, float maxValue)
+{
+    DrawText(text, x1 + xsize / 2 - MeasureText(text, 20) / 2, y1 - 30, 20, BLACK);
+
+    float y2 = y1 + ysize;
+    float x2 = x1 + xsize;
+
+    int steps = 100;
+    float stepSize = (y2 - y1) / steps;
+
+    for (int i = 0; i < steps; i++) 
+    {
+        float yPos = y1 + i * stepSize;
+        float value = maxValue + ((minValue - maxValue) * (float)i / steps);
+        Color color = MapToColor(value, minValue, maxValue);
+        DrawRectangle(x1, yPos, x2 - x1, stepSize + 1, color);
+    }
+
+    // Draw text labels for values
+    int n = 4;
+    for (int i = 0; i < n; i++) 
+    {
+        float t = (float)i / (n - 1);
+        float pointY = y1 + t * (y2 - y1);
+        DrawText(TextFormat("%.2f", maxValue - t * (maxValue - minValue)), x2 + 5, pointY - 10, 20, BLACK);
+    }
+}

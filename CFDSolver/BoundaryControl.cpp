@@ -132,7 +132,7 @@ void FixedOutletBoundaryCondition::CorrectBoundaryCellVelocities(SolverStaggered
 ///////////////////
 void OpenBoundaryCondition::ApplyForPressure(SolverStaggeredIMEXTemp& solver)
 {
-    double fix_coef = 1.0;// 1000.0;
+    double fix_coef = 10.0;
 
     int offset = direction == 0 ? 1 : -1;
     int cell_offset = direction == 0 ? 0 : -1;
@@ -140,7 +140,7 @@ void OpenBoundaryCondition::ApplyForPressure(SolverStaggeredIMEXTemp& solver)
     {
         for (auto [i, j] : boundary_faces)
         {
-            double coeff = solver.dy;
+            double coeff = solver.dy * fix_coef;
             double dp = (pressure - solver.p(i + cell_offset, j));
             double u_b = -dp / solver.fluid.density;
             solver.p_scr(i + cell_offset, j) += coeff * u_b;
@@ -151,7 +151,7 @@ void OpenBoundaryCondition::ApplyForPressure(SolverStaggeredIMEXTemp& solver)
     {
         for (auto [i, j] : boundary_faces)
         {
-            double coeff = solver.dx;
+            double coeff = solver.dx * fix_coef;
             double dp = (pressure - solver.p(i, j + cell_offset));
             double u_b = -dp / solver.fluid.density;
             solver.p_scr(i, j + cell_offset) += coeff * u_b;
@@ -161,13 +161,15 @@ void OpenBoundaryCondition::ApplyForPressure(SolverStaggeredIMEXTemp& solver)
 }
 void OpenBoundaryCondition::ApplyForTemperature(SolverStaggeredIMEXTemp& solver)
 {
+    double fix_coef = 10.0;
+
     int offset = direction == 0 ? 0 : -1;
     int cell_offset = direction == 0 ? 0 : -1;
     if (component == 0) // u
     {
         for (auto [i, j] : boundary_faces)
         {
-            double massflux = (pressure - solver.p(i + cell_offset, j)) * solver.dy;
+            double massflux = fix_coef * (pressure - solver.p(i + cell_offset, j)) * solver.dy;
             if (massflux > 0.0)
             {
                 double coeff = massflux / (solver.dx * solver.dy);
@@ -180,7 +182,7 @@ void OpenBoundaryCondition::ApplyForTemperature(SolverStaggeredIMEXTemp& solver)
     {
         for (auto [i, j] : boundary_faces)
         {
-            double massflux = (pressure - solver.p(i, j + cell_offset)) * solver.dx;
+            double massflux = fix_coef * (pressure - solver.p(i, j + cell_offset)) * solver.dx;
             if (massflux > 0.0)
             {
                 double coeff = massflux / (solver.dx * solver.dy);
@@ -192,6 +194,8 @@ void OpenBoundaryCondition::ApplyForTemperature(SolverStaggeredIMEXTemp& solver)
 }
 void OpenBoundaryCondition::CorrectBoundaryCellVelocities(SolverStaggeredIMEXTemp& solver)
 {
+    double fix_coef = 10.0;
+
     int offset = direction == 0 ? 1 : -1;
     int cell_offset = direction == 0 ? 0 : -1;
     if (component == 0) // u
@@ -199,7 +203,7 @@ void OpenBoundaryCondition::CorrectBoundaryCellVelocities(SolverStaggeredIMEXTem
         for (auto [i, j] : boundary_faces)
         {
             double dp = (pressure - solver.p(i + cell_offset, j));
-            double u_b = dp / solver.fluid.density;
+            double u_b = fix_coef * dp / solver.fluid.density;
             solver.cell_u(i + cell_offset, j) += offset * u_b / 2.0;
         }
     }
@@ -208,8 +212,85 @@ void OpenBoundaryCondition::CorrectBoundaryCellVelocities(SolverStaggeredIMEXTem
         for (auto [i, j] : boundary_faces)
         {
             double dp = (pressure - solver.p(i, j + cell_offset));
-            double u_b = dp / solver.fluid.density;
+            double u_b = fix_coef * dp / solver.fluid.density;
             solver.cell_v(i, j + cell_offset) += offset * u_b / 2.0;
+        }
+    }
+}
+
+void FrictionBoundaryCondition::ApplyFriction(SolverStaggeredIMEXTemp& solver)
+{
+    double coeff = 0.5 * solver.fluid.kinematic_viscosity / (solver.dy / 2);
+    for (int i = 0; i < solver.nx + 1; ++i)
+    {
+        for (int j = 0; j < solver.ny; ++j)
+        {
+            if (!solver.u_face_flags(i, j, Flag::Open))
+            {
+                if (i != 0)
+                {
+                    if (solver.v_face_flags(i - 1, j + 1, Flag::Open)) // Top Left
+                    {
+                        solver.v_coeff(i - 1, j + 1) += coeff;
+                        solver.v_scr(i - 1, j + 1) += wall_velocity * coeff;
+                    }
+                    if (solver.v_face_flags(i - 1, j, Flag::Open)) // Bottom Left
+                    {
+                        solver.v_coeff(i - 1, j) += coeff;
+                        solver.v_scr(i - 1, j) += wall_velocity * coeff;
+                    }
+                }
+                if (i != solver.nx)
+                {
+                    if (solver.v_face_flags(i, j + 1, Flag::Open)) // Top Right
+                    {
+                        solver.v_coeff(i, j + 1) += coeff;
+                        solver.v_scr(i, j + 1) += wall_velocity * coeff;
+                    }
+                    if (solver.v_face_flags(i, j, Flag::Open)) // Bottom Right
+                    {
+                        solver.v_coeff(i, j) += coeff;
+                        solver.v_scr(i, j) += wall_velocity * coeff;
+                    }
+                }
+            }
+        }
+    }
+    coeff = 0.5 * solver.fluid.kinematic_viscosity / (solver.dx / 2);
+    for (int i = 0; i < solver.nx; ++i)
+    {
+        for (int j = 0; j < solver.ny + 1; ++j)
+        {
+            if (!solver.v_face_flags(i, j, Flag::Open))
+            {
+                if (j != 0)
+                {
+                    if (solver.u_face_flags(i, j - 1, Flag::Open)) // Bottom Left
+                    {
+                        solver.u_coeff(i, j - 1) += coeff;
+                        solver.u_scr(i, j - 1) += wall_velocity * coeff;
+                        if (solver.u_face_flags(i + 1, j - 1, Flag::Open)) // Bottom Right
+                        {
+                            solver.u_coeff(i + 1, j - 1) += coeff;
+                            solver.u_scr(i + 1, j - 1) += wall_velocity * coeff;
+                        }
+                    }
+                }
+                if (j != solver.ny)
+                {
+                    if (solver.u_face_flags(i, j, Flag::Open)) // Top Left
+                    {
+                        solver.u_coeff(i, j) += coeff;
+                        solver.u_scr(i, j) += wall_velocity * coeff;
+                    }
+                    if (solver.u_face_flags(i + 1, j, Flag::Open)) // Top Right
+                    {
+                        solver.u_coeff(i + 1, j) += coeff;
+                        solver.u_scr(i + 1, j) += wall_velocity * coeff;
+                    }
+
+                }
+            }
         }
     }
 }

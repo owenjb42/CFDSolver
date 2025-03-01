@@ -16,3 +16,5 @@ bool IsValidFloat(const char* text, bool pos = false);
 bool IsValidInt(const char* text, bool pos = false);
 
 Color MapToColor(float value, float minValue, float maxValue);
+
+void DrawLegend(const char* text, float x1, float y1, float xsize, float ysize, float minValue, float maxValue);

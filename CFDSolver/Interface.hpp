@@ -165,6 +165,11 @@ public:
     float cellWidth{ 0 }, cellHeight{ 0 };
     float minPressure{ 0.0 }, maxPressure{ 0.0 }, minTemp{ 0.0 }, maxTemp{ 0.0 }, minVelocity{ 0.0 }, maxVelocity{ 0.0 };
       
+    // Residuals
+    char residuals[3][32] = { "Pressure", "Divergence", "Temperature" };
+    float residual_values_buffer[3] = { 0.0, 0.0, 0.0 };
+    char residual_values[3][32] = {"", "", ""};
+
     // Render settings
     float offsetX{ 0 }, offsetY{ 0 }; // offset in the screen co-ords
     float zoom{ 1.0f };

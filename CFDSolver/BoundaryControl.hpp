@@ -46,7 +46,8 @@ struct OpenBoundaryCondition : public BoundaryCondition
     double pressure{};
 };
 
-struct FrictionBoundaryCondition : public BoundaryCondition
+struct FrictionBoundaryCondition
 {
-
+    void ApplyFriction(SolverStaggeredIMEXTemp& solver);
+    double wall_velocity = 0.0;
 };
