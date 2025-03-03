@@ -15,7 +15,8 @@ void FixedInletBoundaryCondition::ApplyForVelocity(SolverStaggeredIMEXTemp& solv
         double coeff = solver.fluid.density * flux / (solver.dx * solver.dy);
         for (auto [i, j] : boundary_faces)
         {
-            solver.p_scr(i + cell_offset, j) -= inlet_velocity * solver.dy;
+            solver.p_scr(i + cell_offset, j) += -inlet_velocity * solver.dy;
+            solver.p_coef(i + cell_offset, j) += solver.dy; //check
             solver.u_coeff(i + offset, j) += coeff;
             solver.u_scr(i + offset, j) += coeff * offset * inlet_velocity;
         }
@@ -26,7 +27,8 @@ void FixedInletBoundaryCondition::ApplyForVelocity(SolverStaggeredIMEXTemp& solv
         double coeff = solver.fluid.density * flux / (solver.dx * solver.dy);
         for (auto [i, j] : boundary_faces)
         {
-            solver.p_scr(i, j + cell_offset) -= inlet_velocity * solver.dx;
+            solver.p_scr(i, j + cell_offset) += -inlet_velocity * solver.dx;
+            solver.p_coef(i, j + cell_offset) += solver.dx; //check
             solver.v_coeff(i, j + offset) += coeff;
             solver.v_scr(i, j + offset) += coeff * offset * inlet_velocity;
         }
@@ -94,6 +96,7 @@ void FixedOutletBoundaryCondition::ApplyForVelocity(SolverStaggeredIMEXTemp& sol
             int offset = direction == 0 ? -1 : 1;
             int cell_offset = direction == 0 ? 0 : -1;
             solver.p_scr(i + cell_offset, j) += outlet_velocity * solver.dy;
+            solver.p_coef(i + cell_offset, j) += solver.dy; //check
         }
     }
     else // v
@@ -103,6 +106,7 @@ void FixedOutletBoundaryCondition::ApplyForVelocity(SolverStaggeredIMEXTemp& sol
             int offset = direction == 0 ? -1 : 1;
             int cell_offset = direction == 0 ? 0 : -1;
             solver.p_scr(i, j + cell_offset) += outlet_velocity * solver.dx;
+            solver.p_coef(i, j + cell_offset) += solver.dx; //check
         }
     }
 }
@@ -132,7 +136,7 @@ void FixedOutletBoundaryCondition::CorrectBoundaryCellVelocities(SolverStaggered
 ///////////////////
 void OpenBoundaryCondition::ApplyForPressure(SolverStaggeredIMEXTemp& solver)
 {
-    double fix_coef = 10.0;
+    double fix_coef = 1000.0;
 
     int offset = direction == 0 ? 1 : -1;
     int cell_offset = direction == 0 ? 0 : -1;
@@ -142,8 +146,8 @@ void OpenBoundaryCondition::ApplyForPressure(SolverStaggeredIMEXTemp& solver)
         {
             double coeff = solver.dy * fix_coef;
             double dp = (pressure - solver.p(i + cell_offset, j));
-            double u_b = -dp / solver.fluid.density;
-            solver.p_scr(i + cell_offset, j) += coeff * u_b;
+            double u_b = dp / solver.fluid.density;
+            solver.p_scr(i + cell_offset, j) += coeff * -u_b;
             solver.p_coef(i + cell_offset, j) += coeff;
         }
     }
@@ -153,15 +157,15 @@ void OpenBoundaryCondition::ApplyForPressure(SolverStaggeredIMEXTemp& solver)
         {
             double coeff = solver.dx * fix_coef;
             double dp = (pressure - solver.p(i, j + cell_offset));
-            double u_b = -dp / solver.fluid.density;
-            solver.p_scr(i, j + cell_offset) += coeff * u_b;
+            double u_b = dp / solver.fluid.density;
+            solver.p_scr(i, j + cell_offset) += coeff * -u_b;
             solver.p_coef(i, j + cell_offset) += coeff;
         }
     }
 }
 void OpenBoundaryCondition::ApplyForTemperature(SolverStaggeredIMEXTemp& solver)
 {
-    double fix_coef = 10.0;
+    double fix_coef = 1000.0;
 
     int offset = direction == 0 ? 0 : -1;
     int cell_offset = direction == 0 ? 0 : -1;
@@ -194,7 +198,7 @@ void OpenBoundaryCondition::ApplyForTemperature(SolverStaggeredIMEXTemp& solver)
 }
 void OpenBoundaryCondition::CorrectBoundaryCellVelocities(SolverStaggeredIMEXTemp& solver)
 {
-    double fix_coef = 10.0;
+    double fix_coef = 1000.0;
 
     int offset = direction == 0 ? 1 : -1;
     int cell_offset = direction == 0 ? 0 : -1;

@@ -17,7 +17,7 @@ int main()
 
         // Solve for max n itterations
 
-        auto solve_thread = std::jthread(&SolverStaggeredIMEXTemp::solve, &s, 100000);
+        auto solve_thread = std::jthread(&SolverStaggeredIMEXTemp::solve, &s, 1000000);
 
         interface.RenderResults();
         if (s.is_solving) // If it is still solving stop and post process
