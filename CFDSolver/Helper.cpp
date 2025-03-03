@@ -191,6 +191,6 @@ void DrawLegend(const char* text, float x1, float y1, float xsize, float ysize, 
     {
         float t = (float)i / (n - 1);
         float pointY = y1 + t * (y2 - y1);
-        DrawText(TextFormat("%.2f", maxValue - t * (maxValue - minValue)), x2 + 5, pointY - 10, 20, BLACK);
+        DrawText(TextFormat("%.1e", maxValue - t * (maxValue - minValue)), x2 + 5, pointY - 10, 20, BLACK);
     }
 }

@@ -267,8 +267,8 @@ void Interface::HandlePannel()
         // Ledged Plot
         if (enable_flags[1] && enable_flags[2])
         {
-            DrawLegend(plot_p_or_t ? "Temperature" : "Presssure", x1 + x_offset_outer + x_offset_inner * 4, current_y, x_rec_size * 1.5, y_legend_size, plot_p_or_t ? minTemp : minPressure, plot_p_or_t ? maxTemp : maxPressure);
-            DrawLegend("Velocity", x2 - x_offset_outer - x_offset_inner * 5 - x_rec_size * 1.5, current_y, x_rec_size * 1.5, y_legend_size, minVelocity, maxVelocity);
+            DrawLegend(plot_p_or_t ? "Temperature" : "Presssure", x1 + x_offset_outer + x_offset_inner * 4 - 25, current_y, x_rec_size * 1.5, y_legend_size, plot_p_or_t ? minTemp : minPressure, plot_p_or_t ? maxTemp : maxPressure);
+            DrawLegend("Velocity", x2 - x_offset_outer - x_offset_inner * 5 - x_rec_size * 1.5 - 25, current_y, x_rec_size * 1.5, y_legend_size, minVelocity, maxVelocity);
         }
         else if (enable_flags[2])
         {

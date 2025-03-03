@@ -144,7 +144,7 @@ void OpenBoundaryCondition::ApplyForPressure(SolverStaggeredIMEXTemp& solver)
             double dp = (pressure - solver.p(i + cell_offset, j));
             double u_b = -dp / solver.fluid.density;
             solver.p_scr(i + cell_offset, j) += coeff * u_b;
-            solver.p_coef(i + cell_offset, j) += coeff * fix_coef;
+            solver.p_coef(i + cell_offset, j) += coeff;
         }
     }
     else // v
@@ -155,7 +155,7 @@ void OpenBoundaryCondition::ApplyForPressure(SolverStaggeredIMEXTemp& solver)
             double dp = (pressure - solver.p(i, j + cell_offset));
             double u_b = -dp / solver.fluid.density;
             solver.p_scr(i, j + cell_offset) += coeff * u_b;
-            solver.p_coef(i, j + cell_offset) += coeff * fix_coef;
+            solver.p_coef(i, j + cell_offset) += coeff;
         }
     }
 }
@@ -218,6 +218,9 @@ void OpenBoundaryCondition::CorrectBoundaryCellVelocities(SolverStaggeredIMEXTem
     }
 }
 
+///////////////////////
+// Friction Boundary //
+///////////////////////
 void FrictionBoundaryCondition::ApplyFriction(SolverStaggeredIMEXTemp& solver)
 {
     double coeff = 0.5 * solver.fluid.kinematic_viscosity / (solver.dy / 2);
@@ -269,11 +272,11 @@ void FrictionBoundaryCondition::ApplyFriction(SolverStaggeredIMEXTemp& solver)
                     {
                         solver.u_coeff(i, j - 1) += coeff;
                         solver.u_scr(i, j - 1) += wall_velocity * coeff;
-                        if (solver.u_face_flags(i + 1, j - 1, Flag::Open)) // Bottom Right
-                        {
-                            solver.u_coeff(i + 1, j - 1) += coeff;
-                            solver.u_scr(i + 1, j - 1) += wall_velocity * coeff;
-                        }
+                    }
+                    if (solver.u_face_flags(i + 1, j - 1, Flag::Open)) // Bottom Right
+                    {
+                        solver.u_coeff(i + 1, j - 1) += coeff;
+                        solver.u_scr(i + 1, j - 1) += wall_velocity * coeff;
                     }
                 }
                 if (j != solver.ny)

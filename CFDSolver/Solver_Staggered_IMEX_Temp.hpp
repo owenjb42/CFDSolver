@@ -25,7 +25,7 @@ public:
     bool is_solving{ true };
     Interface& interface;
 
-    void ComputeDivergence() 
+    void ComputeDivergence()
     {
         for (int i = 0; i < nx; ++i) 
         {
@@ -38,7 +38,7 @@ public:
         }
     }
 
-    void ComputeConvectiveTerms()// check density it should be added 
+    void ComputeConvectiveTerms()
     {
         double flux = 0.0;
         double value = 0.0;
@@ -423,7 +423,7 @@ public:
                     if (v_face_flags(i, j + 1, Flag::Open))
                         p_correction(i, j) += (v_coeff(i, j + 1) / Ap) * p_correction_old(i, j + 1);
 
-                    p_correction(i, j) -= divergence(i, j);
+                    p_correction(i, j) -= divergence(i, j) * fluid.density;
                 }
             }
         }
@@ -456,9 +456,27 @@ public:
                     v(i, j) += dt * (p_correction(i, j - 1) - p_correction(i, j)) / (dy * fluid.density);
             }
         }
+
+        //for (int i = 1; i < nx; ++i)
+        //{
+        //    for (int j = 0; j < ny; ++j)
+        //    {
+        //        if (u_face_flags(i, j, Flag::Open))
+        //            u(i, j) += dx * dy * (p_correction(i - 1, j) - p_correction(i, j)) / (dx * fluid.density);
+        //    }
+        //}
+        //
+        //for (int i = 0; i < nx; ++i)
+        //{
+        //    for (int j = 1; j < ny; ++j)
+        //    {
+        //        if (v_face_flags(i, j, Flag::Open))
+        //            v(i, j) += dx * dy * (p_correction(i, j - 1) - p_correction(i, j)) / (dy * fluid.density);
+        //    }
+        //}
     }
 
-    void SolveVelocitiesForMomentumEquation() // check density it should be added 
+    void SolveVelocitiesForMomentumEquation()
     {
         for (int n = 0; n < innerVelocityItterations; ++n)
         {
@@ -467,7 +485,7 @@ public:
                 for (int j = 0; j < ny; ++j)
                 {
                     if (u_face_flags(i, j, Flag::Open))
-                        u(i, j) = (u(i, j) + dt * (u_scr(i, j) + (p(i - 1, j) - p(i, j)) / (dx * fluid.density))) / (1 + dt * u_coeff(i, j));
+                        u(i, j) = (fluid.density * u(i, j) + dt * (u_scr(i, j) + (p(i - 1, j) - p(i, j)) / dx)) / (fluid.density + dt * u_coeff(i, j));
                 }
             }
             for (int i = 0; i < nx; ++i)
@@ -475,10 +493,30 @@ public:
                 for (int j = 1; j < ny; ++j)
                 {
                     if (v_face_flags(i, j, Flag::Open))
-                        v(i, j) = (v(i, j) + dt * (v_scr(i, j) + (p(i, j - 1) - p(i, j)) / (dy * fluid.density))) / (1 + dt * v_coeff(i, j));
+                        v(i, j) = (fluid.density * v(i, j) + dt * (v_scr(i, j) + (p(i, j - 1) - p(i, j)) / dy)) / (fluid.density + dt * v_coeff(i, j));
                 }
             }
         }
+
+        //for (int n = 0; n < innerVelocityItterations; ++n)
+        //{
+        //    for (int i = 1; i < nx; ++i)
+        //    {
+        //        for (int j = 0; j < ny; ++j)
+        //        {
+        //            if (u_face_flags(i, j, Flag::Open))
+        //                u(i, j) = (u_scr(i, j) + (p(i - 1, j) - p(i, j)) / dx) / u_coeff(i, j);
+        //        }
+        //    }
+        //    for (int i = 0; i < nx; ++i)
+        //    {
+        //        for (int j = 1; j < ny; ++j)
+        //        {
+        //            if (v_face_flags(i, j, Flag::Open))
+        //                v(i, j) = (v_scr(i, j) + (p(i, j - 1) - p(i, j)) / dy) / v_coeff(i, j);
+        //        }
+        //    }
+        //}
     }
 
     void SolveTemperatures()
