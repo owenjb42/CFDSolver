@@ -488,7 +488,7 @@ public:
             for (int j = 0; j < ny; ++j)
             {
                 if (u_face_flags(i, j, Flag::Open))
-                    u(i, j) += dx * dy * (p_correction(i - 1, j) - p_correction(i, j)) / (dx * fluid.density); // dx * dy??
+                    u(i, j) += /*dx * dy * */(p_correction(i - 1, j) - p_correction(i, j)) / (dx * fluid.density); // dx * dy??
             }
         }
         
@@ -497,7 +497,7 @@ public:
             for (int j = 1; j < ny; ++j)
             {
                 if (v_face_flags(i, j, Flag::Open))
-                    v(i, j) += dx * dy * (p_correction(i, j - 1) - p_correction(i, j)) / (dy * fluid.density); // dx * dy??
+                    v(i, j) += /*dx * dy * */(p_correction(i, j - 1) - p_correction(i, j)) / (dy * fluid.density); // dx * dy??
             }
         }
     }
@@ -529,7 +529,7 @@ public:
             for (int j = 0; j < ny; ++j)
             {
                 if (u_face_flags(i, j, Flag::Open))
-                    u(i, j) = (1 - relaxation) * u(i, j) + relaxation * (u_scr(i, j) + (p(i - 1, j) - p(i, j)) / dx) / (u_coeff(i, j) + 10e-20); // dx * dy??
+                    u(i, j) = relaxation * u(i, j) + (1 - relaxation) * (u_scr(i, j) + (p(i - 1, j) - p(i, j)) / dx) / (u_coeff(i, j) + 10e-20); // dx * dy??
             }
         }
         for (int i = 0; i < nx; ++i)
@@ -537,7 +537,7 @@ public:
             for (int j = 1; j < ny; ++j)
             {
                 if (v_face_flags(i, j, Flag::Open))
-                    v(i, j) = (1 - relaxation) * v(i, j) + relaxation * (v_scr(i, j) + (p(i, j - 1) - p(i, j)) / dy) / (v_coeff(i, j) + 10e-20); // dx * dy??
+                    v(i, j) = relaxation * v(i, j) + (1 - relaxation) * (v_scr(i, j) + (p(i, j - 1) - p(i, j)) / dy) / (v_coeff(i, j) + 10e-20); // dx * dy??
             }
         }
     }
